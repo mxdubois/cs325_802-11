@@ -61,4 +61,7 @@ public class LinkLayer implements Dot11Interface {
       output.println("LinkLayer: Sending command "+cmd+" with value "+val);
       return 0;
    }
+   
+   // PRIVATE METHODS
+   //------------------
 }
