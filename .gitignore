@@ -1,0 +1,8 @@
+# Silly Ecipse stuff #
+*.settings
+*.classpath
+*.project
+# Binaries #
+bin/
+# Silly Mac stuff #
+.DS_Store
