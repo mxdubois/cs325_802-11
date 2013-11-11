@@ -30,3 +30,6 @@ local.properties
 
 # Silly Mac stuff #
 .DS_Store
+
+# Testing code
+Tester.java
