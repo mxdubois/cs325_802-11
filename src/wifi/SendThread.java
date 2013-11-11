@@ -32,7 +32,7 @@ public class SendThread implements Runnable {
 	
 	public Packet buildBeacon() {
 		// TODO fixme
-		return new Packet((short)0, new byte[10], 1);
+		return new Packet(Packet.CTRL_BEACON_CODE, (short)0, new byte[10], 1);
 	}
 	
 	
