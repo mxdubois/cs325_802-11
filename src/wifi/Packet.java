@@ -8,9 +8,9 @@ import wifi.LinkLayer;
  * Represents an 802.11~ packet.
  * Also provides methods for parsing a byte array into a packet
  * @author Nathan P
- *
+ * TODO: http://henkelmann.eu/2011/02/24/a_curse_on_java_bitwise_operators
  */
-public class Packet {
+public class Packet implements Comparable<Packet>{
 	
 	private static final String TAG = "Packet";
 	
@@ -31,18 +31,17 @@ public class Packet {
 	private static final int HEADER_SIZE = 6;
 	private static final int CRC_SIZE = 4;
 
-	ByteBuffer mPacket;
-
+	private ByteBuffer mPacket;
 	private int mPacketSize; // Total packet length
 
-	public Packet(int type, short dest, byte[] data, int len) {
+	public Packet(int type, short dest, short src, byte[] data, int len) {
 		// If len exceeds the size of the data buffer, add the entire buffer
 		int dataSize = Math.min(len, data.length);
 
 		mPacketSize = HEADER_SIZE + CRC_SIZE + dataSize;
 		mPacket = ByteBuffer.allocate(mPacketSize);
 
-		buildHeader(type, dest);
+		buildHeader(type, dest, src);
 		
 		// Insert data into packet buffer.
 		for(int i = 0; i < dataSize; i++)
@@ -62,7 +61,7 @@ public class Packet {
 		mPacket = ByteBuffer.wrap(packet);
 	}
 
-	private void buildHeader(int type, short dest) {
+	private void buildHeader(int type, short dest, short src) {
 		byte firstByte = mPacket.get(0);
 
 		// Set type. Shift type 5 bits left remove and trailing bits
@@ -72,9 +71,11 @@ public class Packet {
 		
 		// Set destination
 		mPacket.putShort(CONTROL_SIZE, dest);
+		// Set source
+		mPacket.putShort(CONTROL_SIZE+DEST_ADDR_SIZE, src);
 
 		setRetry(false);
-		setSequenceNum((short)0);
+		setSequenceNum((short)255);
 		
 	}
 
@@ -96,19 +97,8 @@ public class Packet {
 		mPacket.put(1, lowByte);
 	}
 
-	public byte[] getBytes() {
-		mPacket.position(0);
-
-		// Copy bytes into a byte array
-		byte[] packetBytes = new byte[mPacketSize];
-		mPacket.get(packetBytes, 0, mPacketSize);
-
-		return packetBytes;
-	}
-
 	public void setRetry(boolean isRetry) {
 		// Retry is 4th bit in first byte
-		// TODO: http://henkelmann.eu/2011/02/24/a_curse_on_java_bitwise_operators
 		byte firstByte = (byte) (isRetry ? mPacket.get(0) | 0x10 : mPacket.get(0) & 0xEF);
 		mPacket.put(0, firstByte);
 	}
@@ -118,6 +108,16 @@ public class Packet {
 		int crc = 0xFFFFFFFF;
 		mPacket.putInt(mPacketSize-CRC_SIZE, crc);
 		return crc;
+	}
+	
+	public byte[] getBytes() {
+		mPacket.position(0);
+
+		// Copy bytes into a byte array
+		byte[] packetBytes = new byte[mPacketSize];
+		mPacket.get(packetBytes, 0, mPacketSize);
+
+		return packetBytes;
 	}
 	
 	public int getType() {
@@ -156,10 +156,22 @@ public class Packet {
 		// to get the high 4 bits
 		short highVal = (short) ((highByte << 8) & 0xF00);
 		
-		// Or in the high 4 bits of the sequence number
+		// OR in the high 4 bits of the sequence number
 		seqNum = (short) (seqNum | highVal);
 		
 		return seqNum;
+	}
+	
+	public byte[] getData() {
+		byte[] data;
+		// Return empty lists if no data or packet is of insufficient size
+		if(mPacketSize <= HEADER_SIZE + CRC_SIZE) {
+			data = new byte[0];
+		} else {
+			data = new byte[getDataLen()];
+			mPacket.get(data, HEADER_SIZE, getDataLen());
+		}
+		return data;
 	}
 	
 	public int getCRC() {
@@ -184,7 +196,9 @@ public class Packet {
 	}
 	
 	/**
-	 * Pars the destination address out of a packet byte array
+	 * Parses the destination address out of a packet byte array. This should be called
+	 * on incoming packets so that we don't have to parse out the entire packet if its 
+	 * destination is in fact elsewhere.
 	 * @param packet The packet to parse
 	 * @return The destination address, or INVALID_PACKET if packet was of insufficient length
 	 */
@@ -193,37 +207,6 @@ public class Packet {
 		if(packet.length > CONTROL_SIZE + DEST_ADDR_SIZE)
 			dest = ByteBuffer.wrap(packet, CONTROL_SIZE, DEST_ADDR_SIZE).getShort();
 		return dest;
-	}
-	
-	/**
-	 * Parses the packet type from a packet byte array
-	 * @param packet The packet to parse
-	 * @return The packet type, or INVALID_PACKET if packet was of insufficient length
-	 */
-	public static int parseType(byte[] packet) {
-		int type = INVALID_PACKET;
-		if(packet.length > 0) {
-			byte firstByte = packet[0];
-			// Shift right 5 bits and remove any leading bits
-			type = (firstByte >> 5) & 0x7;
-		}
-		return type;
-	}
-	
-	public static byte[] parseData(byte[] packet) {
-		byte[] data;
-		// Return empty lists if no data or packet is of insufficient size
-		if(packet.length <= HEADER_SIZE + CRC_SIZE) {
-			data = new byte[0];
-		} else {
-			int dataLength = packet.length - HEADER_SIZE - CRC_SIZE;
-			data = new byte[dataLength];
-			// Wrap data portion of packet in a ByteBuffer and copy to a byte array
-			ByteBuffer packetBuffer = ByteBuffer.wrap(packet, HEADER_SIZE, dataLength);
-			packetBuffer.get(data, 0, dataLength);
-			
-		}
-		return data;
 	}
 
 	/**
@@ -253,5 +236,10 @@ public class Packet {
 					". CRC: " + getCRC();
 		
 		return str;		
+	}
+
+	@Override
+	public int compareTo(Packet packet) {
+		return getType() - packet.getType();
 	}
 }

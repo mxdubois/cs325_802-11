@@ -1,6 +1,6 @@
 package wifi;
 
-import java.util.PriorityQueue;
+import java.util.Queue;
 
 import rf.RF;
 
@@ -11,32 +11,35 @@ import rf.RF;
  */
 public class RecvThread implements Runnable {
 
+	private static final String TAG = "RecvThread";
+	
 	RF mRF;
 	short mHostAddr;
-	PriorityQueue<Packet> mRecvData;
-	PriorityQueue<Packet> mRecvAck;
+	Queue<Packet> mRecvData;
+	Queue<Packet> mRecvAck;
 	NSyncClock mClock;
-	
-	
-	
+		
 	// TODO lots of parameters. Builder pattern?
-	public RecvThread(RF rf, NSyncClock clock, PriorityQueue<Packet> recvAck, PriorityQueue<Packet> recvData, short hostAddr) {
+	public RecvThread(RF rf, NSyncClock clock, Queue<Packet> recvAck, Queue<Packet> recvData, short hostAddr) {
 		mRF = rf;
 		mClock = clock;
 		mRecvData = recvData;
 		mRecvAck = recvAck;
 		mHostAddr = hostAddr;
+		Log.i(TAG, "RecvThread initialized");
 	}
 	
 	@Override
 	public void run() {
 		// TODO: a stopping mechanism
 		// http://stackoverflow.com/questions/10961714/how-to-properly-stop-the-thread-in-java
+		Log.i(TAG, "RecvThread running");
 		while(true) {
-			byte[] packet = mRF.receive();
-			short dest = Packet.parseDest(packet);
-			if(dest == mHostAddr) { // Only consume packets sent to this host
-				int type = Packet.parseType(packet);
+			byte[] recvTrans = mRF.receive();
+			Log.i(TAG, "RecvThread got a transmission");
+			if(Packet.parseDest(recvTrans) == mHostAddr) { // Only consume packets sent to this host
+				Packet packet = Packet.parse(recvTrans);
+				int type = packet.getType();
 				if(type == Packet.CTRL_ACK_CODE) {
 					consumeAck(packet);
 				} else if(type == Packet.CTRL_BEACON_CODE) {
@@ -49,16 +52,19 @@ public class RecvThread implements Runnable {
 		}
 	}
 	
-	private void consumeAck(byte[] ackPacket) {
-		mRecvAck.add(Packet.parse(ackPacket));
+	private void consumeAck(Packet ackPack) {
+		Log.i(TAG, "Consuming ACK packet");
+		mRecvAck.add(ackPack);
 	}
 	
-	private void consumeBeacon(byte[] beaconPacket) {
-		mClock.consumeBacon(Packet.parse(beaconPacket));
+	private void consumeBeacon(Packet beaconPacket) {
+		Log.i(TAG, "Consuming B(E)ACON packet");
+		mClock.consumeBacon(beaconPacket);
 	}
 	
-	private void consumeData(byte[] dataPacket) {
-		mRecvData.add(Packet.parse(dataPacket));
+	private void consumeData(Packet dataPacket) {
+		Log.i(TAG, "Consuming DATA packet");
+		mRecvData.add(dataPacket);
 	}
 
 }
