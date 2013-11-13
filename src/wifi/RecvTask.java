@@ -9,7 +9,7 @@ import rf.RF;
  * @author Nathan P
  *
  */
-public class RecvThread implements Runnable {
+public class RecvTask implements Runnable {
 
 	private static final String TAG = "RecvThread";
 	
@@ -20,13 +20,13 @@ public class RecvThread implements Runnable {
 	NSyncClock mClock;
 		
 	// TODO lots of parameters. Builder pattern?
-	public RecvThread(RF rf, NSyncClock clock, Queue<Short> recvAck, Queue<Packet> recvData, short hostAddr) {
+	public RecvTask(RF rf, NSyncClock clock, Queue<Short> recvAck, Queue<Packet> recvData, short hostAddr) {
 		mRF = rf;
 		mClock = clock;
 		mRecvData = recvData;
 		mRecvAck = recvAck;
 		mHostAddr = hostAddr;
-		Log.i(TAG, "RecvThread initialized");
+		Log.i(TAG, TAG + " initialized");
 	}
 	
 	@Override

@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import rf.RF;
 
-public class SendThread implements Runnable {
+public class SendTask implements Runnable {
 	
 	private static final String TAG = "SendThread";
 	private static final boolean DEBUG = LinkLayer.debugLevel > 0;
@@ -50,7 +50,7 @@ public class SendThread implements Runnable {
 	private long mCW = CW_MIN;
 	private static final long A_SLOT_TIME_NANO = RF.aSlotTime * NANO_SEC_PER_MS;
 	
-	public SendThread(
+	public SendTask(
 			RF rf,
 			NSyncClock nSyncClock,
 			AtomicInteger hostStatus,
@@ -64,7 +64,7 @@ public class SendThread implements Runnable {
 		mHostStatus = hostStatus;
 		mAckWaitNanoSec = mClock.nanoAckWaitEst();
 		if(DEBUG) 
-			Log.i(TAG, "SendThread initialized!");
+			Log.i(TAG, TAG + " initialized!");
 		setState(WAITING_FOR_DATA);
 	}
 	

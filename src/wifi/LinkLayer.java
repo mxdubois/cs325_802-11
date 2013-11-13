@@ -43,9 +43,9 @@ public class LinkLayer implements Dot11Interface {
 	private PriorityBlockingQueue<Packet> mSendQueue;
 	
 	private Thread mRecvThread;
-	private RecvThread mRecvr;
+	private RecvTask mRecvTask;
 	private Thread mSendThread;
-	private SendThread mSender;
+	private SendTask mSendTask;
 	
 	private NSyncClock mClock;
 	private AtomicInteger mStatus;
@@ -74,12 +74,12 @@ public class LinkLayer implements Dot11Interface {
 		
 		mClock = new NSyncClock();
 		
-		mRecvr = new RecvThread(theRF, mClock, mRecvAck, mRecvData, ourMAC);
-		mRecvThread = new Thread(mRecvr);
+		mRecvTask = new RecvTask(theRF, mClock, mRecvAck, mRecvData, ourMAC);
+		mRecvThread = new Thread(mRecvTask);
 		mRecvThread.start();
 		
-		mSender = new SendThread(theRF, mClock, mStatus, mSendQueue, mRecvAck);
-		mSendThread = new Thread(mSender);
+		mSendTask = new SendTask(theRF, mClock, mStatus, mSendQueue, mRecvAck);
+		mSendThread = new Thread(mSendTask);
 		mSendThread.start();
 		
 		if(debugLevel > 0)
@@ -187,17 +187,17 @@ public class LinkLayer implements Dot11Interface {
 			output.println("LinkLayer: Current Settings: \n" + 
 					"1. debugLevel: " + debugLevel + "\n" +
 					"2. slotSelectionPolicy: " 
-						+ mSender.getSlotSelectionPolicy() + "\n" +
-					"3. beaconInterval: " + mSender.getBeaconInterval() + "\n");
+						+ mSendTask.getSlotSelectionPolicy() + "\n" +
+					"3. beaconInterval: " + mSendTask.getBeaconInterval() + "\n");
 			break;
 		case 1: // Debug Level
 			debugLevel = val;
 			break;
 		case 2: // Slot Selection
-			mSender.setSlotSelectionPolicy(val);
+			mSendTask.setSlotSelectionPolicy(val);
 			break;
 		case 3: // Beacon Interval
-			mSender.setBeaconInterval(val);
+			mSendTask.setBeaconInterval(val);
 			break;		
 		}
 		return 0;
