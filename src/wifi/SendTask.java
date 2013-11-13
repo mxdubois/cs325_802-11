@@ -1,6 +1,7 @@
 package wifi;
 
 import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import rf.RF;
@@ -76,18 +77,22 @@ public class SendTask implements Runnable {
 			
 			case WAITING_FOR_DATA:
 				try {
+					mPacket = null;
 					if(System.nanoTime() - mLastBeaconEvent >= mBeaconInterval) {
 						// we need to send a beacon
 						mPacket = mClock.generateBeacon();
 						mLastBeaconEvent = System.nanoTime();
 					} else {
 						// TODO if no data is queued this blocks and doesn't send beacons
-						mPacket = mSendQueue.take();
+						//mPacket = mSendQueue.take();
+						mPacket = mSendQueue.poll(mBeaconInterval, TimeUnit.NANOSECONDS);
 					}
-					mPacket.setSequenceNumber(mSequenceNumber);
-					mTryCount = 0;
-					setBackoff(mTryCount, mPacket.getType());
-					setState(WAITING_FOR_OPEN_CHANNEL);
+					if(mPacket != null) {
+						mPacket.setSequenceNumber(mSequenceNumber);
+						mTryCount = 0;
+						setBackoff(mTryCount, mPacket.getType());
+						setState(WAITING_FOR_OPEN_CHANNEL);
+					}
 				} catch (InterruptedException e) {
 					Log.e(TAG, e.getMessage());
 				}
@@ -132,6 +137,8 @@ public class SendTask implements Runnable {
 						// Wait for an ack
 						setState(WAITING_FOR_ACK);
 					}
+				} else {
+					// Sleep how long?
 				}
 				break;
 				
