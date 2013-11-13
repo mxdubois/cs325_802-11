@@ -88,7 +88,7 @@ public class Packet implements Comparable<Packet>{
 		mPacket.putShort(CONTROL_SIZE+DEST_ADDR_SIZE, src);
 
 		setRetry(false);
-		setSequenceNumber((short)255);
+		setSequenceNumber((short)20);
 	}
 
 	public void setSequenceNumber(short seqNum) {	
@@ -201,7 +201,9 @@ public class Packet implements Comparable<Packet>{
 			data = new byte[0];
 		} else {
 			data = new byte[getDataLen()];
-			mPacket.get(data, HEADER_SIZE, getDataLen());
+			Log.i(TAG, "Buffer of length " + getDataLen() + ". Total length " + mPacket.limit());
+			for (int i = 0; i < getDataLen(); i++)
+	         data[i] = mPacket.get(i+HEADER_SIZE); 
 		}
 		return data;
 	}

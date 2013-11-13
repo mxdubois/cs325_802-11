@@ -24,4 +24,14 @@ public class Log {
 	public static void e(String tag, String message) {
 		System.err.println(tag + " : " + message);
 	}
+	
+	/**
+	 * For logging debug messages
+	 * @param tag Usually caller's class name
+	 * @param message Error message
+	 */
+	public static void d(String tag, String message) {
+		if(LinkLayer.debugLevel > 0)
+			i(tag, message);
+	}
 } 
