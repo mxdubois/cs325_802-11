@@ -63,6 +63,7 @@ public class LinkLayer implements Dot11Interface {
 	 * @param output  Output stream associated with GUI
 	 */
 	public LinkLayer(short ourMAC, PrintWriter output) {
+		mStatus = new AtomicInteger();
 		this.ourMAC = ourMAC;
 		this.output = output;
 		// TODO check if RF init failed?
