@@ -1,6 +1,7 @@
 package wifi;
 
 import java.util.Queue;
+import java.util.concurrent.BlockingQueue;
 
 import rf.RF;
 
@@ -15,12 +16,12 @@ public class RecvTask implements Runnable {
 	
 	RF mRF;
 	short mHostAddr;
-	Queue<Packet> mRecvData;
+	BlockingQueue<Packet> mRecvData;
 	Queue<Short> mRecvAck;
 	NSyncClock mClock;
 		
 	// TODO lots of parameters. Builder pattern?
-	public RecvTask(RF rf, NSyncClock clock, Queue<Short> recvAck, Queue<Packet> recvData, short hostAddr) {
+	public RecvTask(RF rf, NSyncClock clock, Queue<Short> recvAck, BlockingQueue<Packet> recvData, short hostAddr) {
 		mRF = rf;
 		mClock = clock;
 		mRecvData = recvData;
@@ -64,7 +65,18 @@ public class RecvTask implements Runnable {
 	
 	private void consumeData(Packet dataPacket) {
 		Log.i(TAG, "Consuming DATA packet");
-		mRecvData.add(dataPacket);
+		try {
+			// If space remains, add to end
+			if(mRecvData.remainingCapacity() != 0) {
+				mRecvData.put(dataPacket);
+			// If queue is full, remove oldest element
+			} else {
+				mRecvData.take();
+				mRecvData.put(dataPacket);
+			}
+		} catch(InterruptedException ex) {
+			Log.e(TAG, "RevTask interrupted when blocking on the receive data queue");
+		}
 	}
 
 }

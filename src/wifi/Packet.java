@@ -77,7 +77,7 @@ public class Packet implements Comparable<Packet>{
 	private void buildHeader(int type, short dest, short src) {
 		byte firstByte = mPacket.get(0);
 
-		// Set type. Shift type 5 bits left remove and trailing bits
+		// Set type. Shift type 5 bits left and remove trailing bits
 		byte typeMask = (byte) ((type << 5) & 0xE0); // 11100000
 		firstByte = (byte) (firstByte | typeMask);
 		mPacket.put(0, firstByte);

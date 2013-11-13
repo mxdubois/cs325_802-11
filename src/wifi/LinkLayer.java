@@ -2,7 +2,8 @@ package wifi;
 import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.LinkedList;
-import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -17,11 +18,9 @@ public class LinkLayer implements Dot11Interface {
 
 	private static final String TAG = "LinkLayer";
 	public static int debugLevel = 1;
-	
+
 	public static final int MAX_BYTE_VAL = 255;
-	
-	private static final int RECV_WAIT_MILLIS = 100;
-	
+
 	public static final int SUCCESS = 1;
 	public static final int UNSPECIFIED_ERROR = 2;
 	public static final int RF_INIT_FAILED = 3;
@@ -32,24 +31,29 @@ public class LinkLayer implements Dot11Interface {
 	public static final int BAD_MAC_ADDRESS = 8;
 	public static final int ILLEGAL_ARGUMENT = 9;
 	public static final int INSUFFICIENT_BUFFER_SPACE = 10;
-	
-	
+
+	public static final int RECV_DATA_BUFFER_SIZE = 300;
+	private static final int RECV_SLEEP_MILLIS = 100;
+
+
 	private RF theRF;           // You'll need one of these eventually
 	private short ourMAC; // Our MAC address
 	private PrintWriter output; // The output stream we'll write to
-	
-	private Queue<Packet> mRecvData;
+
+	private BlockingQueue<Packet> mRecvData;
 	private PriorityBlockingQueue<Short> mRecvAck;
 	private PriorityBlockingQueue<Packet> mSendQueue;
-	
+
 	private Thread mRecvThread;
 	private RecvTask mRecvTask;
 	private Thread mSendThread;
 	private SendTask mSendTask;
-	
+
+	private int mRecvDataOffset;
+
 	private NSyncClock mClock;
 	private AtomicInteger mStatus;
-	
+
 	// STATUS CODES TO IMPLEMENT
 	// TODO UNSPECIFIED_ERRORs
 	// TODO RF_INIT_FAILED
@@ -68,25 +72,27 @@ public class LinkLayer implements Dot11Interface {
 		this.output = output;
 		// TODO check if RF init failed?
 		theRF = new RF(null, null);
-		
-		mRecvData = new LinkedList<Packet>();
+
+		mRecvData = new ArrayBlockingQueue<Packet>(RECV_DATA_BUFFER_SIZE);
 		mRecvAck = new PriorityBlockingQueue<Short>();
 		mSendQueue = new PriorityBlockingQueue<Packet>();
-		
+
 		mClock = new NSyncClock();
-		
+
 		mRecvTask = new RecvTask(theRF, mClock, mRecvAck, mRecvData, ourMAC);
 		mRecvThread = new Thread(mRecvTask);
 		mRecvThread.start();
-		
+
 		mSendTask = new SendTask(theRF, mClock, mStatus, mSendQueue, mRecvAck);
 		mSendThread = new Thread(mSendTask);
 		mSendThread.start();
-		
+
+		mRecvDataOffset = 0;
+
 		if(debugLevel > 0)
 			Log.i(TAG, "Constructor ran.");
 	}
-	
+
 	// TODO do we need an init method?
 
 	/**
@@ -106,7 +112,7 @@ public class LinkLayer implements Dot11Interface {
 		if(data.length < len) {
 			setStatus(ILLEGAL_ARGUMENT);
 		}
-		
+
 		if(debugLevel > 0)
 			Log.i(TAG,"Sending "+len+" bytes to "+dest);
 		int queued = 0;
@@ -133,119 +139,123 @@ public class LinkLayer implements Dot11Interface {
 	public int recv(Transmission t) {
 		if(debugLevel > 0)
 			Log.i(TAG, "recv() called, waiting for queued data");
-		// TODO use a blocking queue. Consider http://stackoverflow.com/a/18375862/1599617
 		Packet recvData = null;
 		while(recvData == null) {
-			if(mRecvData.isEmpty()) {
+			mRecvData.peek();
+			if(recvData == null)
 				try {
-					Thread.sleep(RECV_WAIT_MILLIS);
+					Thread.sleep(RECV_SLEEP_MILLIS);
 				} catch (InterruptedException e) {
-					Log.e(TAG, "Thread interrupted while sleeping on recv()");
+					Log.e(TAG, "Interrupted while sleeping in recv()");
 					e.printStackTrace();
 				}
-			} else {
-				Log.i(TAG, "Data packet found in recvData queue, returning to caller");
-				recvData = mRecvData.poll();
-			}
 		}
+
 		// Put addresses in Transmission object
 		t.setDestAddr(recvData.getDestAddr());
 		t.setSourceAddr(recvData.getSrcAddr());
-		
-		// Ensure no buffer overflow
-		// TODO: is this to spec? what do we do with packet data that doesn't fit 
-		// in the transmission buffer?
+
 		int dataLength;
 		int transBufLength = t.getBuf().length;
 		byte[] data = recvData.getData();
-		if(data.length <= transBufLength) {
-			t.setBuf(recvData.getData());
-			dataLength = data.length;
+		if(data.length - mRecvDataOffset <= transBufLength) {
+			t.setBuf(Arrays.copyOfRange(data, mRecvDataOffset, data.length-1));
+			dataLength = data.length - mRecvDataOffset;
+			mRecvDataOffset = 0;
+			try {
+				mRecvData.take(); // All packet data has been consumed, so remove packet from queue
+			} catch (InterruptedException e) {
+				Log.e(TAG, "Interrupted while blocking on receive data take()");
+				e.printStackTrace();
+			} 
 		} else {
+			// If packet length exceeds buffer length, copy in subarray
 			t.setBuf(Arrays.copyOfRange(data, 0, transBufLength));
-			dataLength = transBufLength;			
-		}		
+			dataLength = transBufLength;  
+			// Set offset into packet data for next call, and don't consume packet
+			mRecvDataOffset = transBufLength;
+		}                
 		return dataLength;
 	}
 
-	/**
-	 * Returns a current status code.  See docs for full description.
-	 */
-	public int status() {
-		if(debugLevel > 0)
-			Log.i(TAG, "Faking a status() return value of 0");
-		return mStatus.get();
-	}
+/**
+ * Returns a current status code.  See docs for full description.
+ */
+public int status() {
+	if(debugLevel > 0)
+		Log.i(TAG, "Faking a status() return value of 0");
+	return mStatus.get();
+}
 
-	/**
-	 * Passes command info to your link layer.  See docs for full description.
-	 */
-	public int command(int cmd, int val) {
-		if(debugLevel > 0)
-			Log.i(TAG, "Sending command "+cmd+" with value "+val);
-		switch(cmd) {
-		case 0 : // Options and Settings
-			output.println("LinkLayer: Current Settings: \n" + 
-					"1. debugLevel: " + debugLevel + "\n" +
-					"2. slotSelectionPolicy: " 
-						+ mSendTask.getSlotSelectionPolicy() + "\n" +
-					"3. beaconInterval: " + mSendTask.getBeaconInterval() + "\n");
-			break;
-		case 1: // Debug Level
-			debugLevel = val;
-			break;
-		case 2: // Slot Selection
-			mSendTask.setSlotSelectionPolicy(val);
-			break;
-		case 3: // Beacon Interval
-			mSendTask.setBeaconInterval(val);
-			break;		
-		}
-		return 0;
+/**
+ * Passes command info to your link layer.  See docs for full description.
+ */
+public int command(int cmd, int val) {
+	if(debugLevel > 0)
+		Log.i(TAG, "Sending command "+cmd+" with value "+val);
+	switch(cmd) {
+	case 0 : // Options and Settings
+		output.println("LinkLayer: Current Settings: \n" + 
+				"1. debugLevel: " + debugLevel + "\n" +
+				"2. slotSelectionPolicy: " 
+				+ mSendTask.getSlotSelectionPolicy() + "\n" +
+				"3. beaconInterval: " + mSendTask.getBeaconInterval() + "\n");
+		break;
+	case 1: // Debug Level
+		debugLevel = val;
+		break;
+	case 2: // Slot Selection
+		mSendTask.setSlotSelectionPolicy(val);
+		break;
+	case 3: // Beacon Interval
+		mSendTask.setBeaconInterval(val);
+		break;		
 	}
-	
-	// PACKAGE PRIVATE / PROTECTED METHODS
-	//-------------------------
+	return 0;
+}
 
-	// PRIVATE METHODS
-	//------------------
-	private void setStatus(int code) {
-		mStatus.set(code);
-		if(debugLevel > 0) {
-			switch(code) {
-			case SUCCESS:
-				Log.i(TAG, "Initial value if 802_init is successful");
-				break;
-			case UNSPECIFIED_ERROR:
-				Log.e(TAG, "General error code");
-				break;
-			case RF_INIT_FAILED:
-				Log.e(TAG, "Attempt to initialize RF layer failed");
-				break;
-			case TX_DELIVERED:
-				Log.i(TAG, "Last transmission was acknowledged");
-				break;
-			case TX_FAILED:
-				Log.e(TAG, "Last transmission was abandoned after unsuccessful delivery attempts");
-				break;
-			case BAD_BUF_SIZE:
-				Log.e(TAG, "Buffer size was negative");
-				break;
-			case BAD_ADDRESS:
-				Log.e(TAG, "Pointer to a buffer or address was NULL");
-				break;
-			case BAD_MAC_ADDRESS:
-				Log.e(TAG, "Illegal MAC address was specified");
-				break;
-			case ILLEGAL_ARGUMENT:
-				Log.e(TAG, "One or more arguments are invalid");
-				break;
-			case INSUFFICIENT_BUFFER_SPACE:
-				Log.e(TAG, "Outgoing transmission rejected due to insufficient buffer space");
-				break;
-			}
-			
+// PACKAGE PRIVATE / PROTECTED METHODS
+//-------------------------
+
+// PRIVATE METHODS
+//------------------
+private void setStatus(int code) {
+	mStatus.set(code);
+	if(debugLevel > 0) {
+		switch(code) {
+		case SUCCESS:
+			Log.i(TAG, "Initial value if 802_init is successful");
+			break;
+		case UNSPECIFIED_ERROR:
+			Log.e(TAG, "General error code");
+			break;
+		case RF_INIT_FAILED:
+			Log.e(TAG, "Attempt to initialize RF layer failed");
+			break;
+		case TX_DELIVERED:
+			Log.i(TAG, "Last transmission was acknowledged");
+			break;
+		case TX_FAILED:
+			Log.e(TAG, "Last transmission was abandoned after unsuccessful delivery attempts");
+			break;
+		case BAD_BUF_SIZE:
+			Log.e(TAG, "Buffer size was negative");
+			break;
+		case BAD_ADDRESS:
+			Log.e(TAG, "Pointer to a buffer or address was NULL");
+			break;
+		case BAD_MAC_ADDRESS:
+			Log.e(TAG, "Illegal MAC address was specified");
+			break;
+		case ILLEGAL_ARGUMENT:
+			Log.e(TAG, "One or more arguments are invalid");
+			break;
+		case INSUFFICIENT_BUFFER_SPACE:
+			Log.e(TAG, "Outgoing transmission rejected due to insufficient buffer space");
+			break;
 		}
+
 	}
-	
+}
+
 }
