@@ -42,7 +42,7 @@ public class SendTask implements Runnable {
 	// INTERVALS
 	private static final long NANO_SEC_PER_MS = NSyncClock.NANO_SEC_PER_MS;
 	private long mAckWaitNanoSec = 20L * NANO_SEC_PER_MS;
-	private long mBeaconInterval = 40L * NANO_SEC_PER_MS;
+	private long mBeaconInterval = 1000L * NANO_SEC_PER_MS;
 	private long mBackoff = 0L;
 	// Contention window
 	private static final long CW_MIN = RF.aCWmin; //TODO proper value
@@ -81,6 +81,7 @@ public class SendTask implements Runnable {
 						mPacket = mClock.generateBeacon();
 						mLastBeaconEvent = System.nanoTime();
 					} else {
+						// TODO if no data is queued this blocks and doesn't send beacons
 						mPacket = mSendQueue.take();
 					}
 					mPacket.setSequenceNumber(mSequenceNumber);
@@ -123,7 +124,14 @@ public class SendTask implements Runnable {
 					// TODO handle problems with transmit
 					transmit(mPacket);
 					mTryCount++;
-					setState(WAITING_FOR_ACK);
+					if(mPacket.isBeacon()) {
+						// Don't bother with retries
+						mPacket = null;
+						setState(WAITING_FOR_DATA);
+					} else {
+						// Wait for an ack
+						setState(WAITING_FOR_ACK);
+					}
 				}
 				break;
 				
@@ -145,6 +153,7 @@ public class SendTask implements Runnable {
 						mHostStatus.set(LinkLayer.TX_DELIVERED);
 						NSyncClock.dance();
 					}
+					// Moving on
 					mPacket = null;
 					setState(WAITING_FOR_DATA);
 				} else if(System.nanoTime() - mLastEvent >= mAckWaitNanoSec) {

@@ -37,7 +37,7 @@ public class RecvTask implements Runnable {
 		while(true) {
 			byte[] recvTrans = mRF.receive();
 			Log.i(TAG, "RecvThread got a transmission");
-			if(Packet.parseDest(recvTrans) == mHostAddr) { // Only consume packets sent to this host
+			if(true || Packet.parseDest(recvTrans) == mHostAddr) { // Only consume packets sent to this host
 				Packet packet = Packet.parse(recvTrans);
 				int type = packet.getType();
 				if(type == Packet.CTRL_ACK_CODE) {
