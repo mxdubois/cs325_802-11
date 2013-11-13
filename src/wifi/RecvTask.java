@@ -11,7 +11,7 @@ import rf.RF;
  */
 public class RecvTask implements Runnable {
 
-	private static final String TAG = "RecvThread";
+	private static final String TAG = "RecvTask";
 	
 	RF mRF;
 	short mHostAddr;

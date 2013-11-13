@@ -7,7 +7,7 @@ import rf.RF;
 
 public class SendTask implements Runnable {
 	
-	private static final String TAG = "SendThread";
+	private static final String TAG = "SendTask";
 	private static final boolean DEBUG = LinkLayer.debugLevel > 0;
 	
 	// STATES
