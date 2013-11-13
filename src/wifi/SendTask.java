@@ -78,14 +78,17 @@ public class SendTask implements Runnable {
 			case WAITING_FOR_DATA:
 				try {
 					mPacket = null;
-					if(System.nanoTime() - mLastBeaconEvent >= mBeaconInterval) {
+					
+					long beaconElapsed = System.nanoTime() - mLastBeaconEvent;
+					if(beaconElapsed >= mBeaconInterval) {
 						// we need to send a beacon
 						mPacket = mClock.generateBeacon();
 						mLastBeaconEvent = System.nanoTime();
 					} else {
 						// TODO if no data is queued this blocks and doesn't send beacons
 						//mPacket = mSendQueue.take();
-						mPacket = mSendQueue.poll(mBeaconInterval, TimeUnit.NANOSECONDS);
+						mPacket = mSendQueue.poll(mBeaconInterval, 
+												TimeUnit.NANOSECONDS);
 					}
 					if(mPacket != null) {
 						mPacket.setSequenceNumber(mSequenceNumber);
