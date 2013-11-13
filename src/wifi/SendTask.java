@@ -1,6 +1,7 @@
 package wifi;
 
 import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import rf.RF;
@@ -42,7 +43,7 @@ public class SendTask implements Runnable {
 	// INTERVALS
 	private static final long NANO_SEC_PER_MS = NSyncClock.NANO_SEC_PER_MS;
 	private long mAckWaitNanoSec = 20L * NANO_SEC_PER_MS;
-	private long mBeaconInterval = 40L * NANO_SEC_PER_MS;
+	private long mBeaconInterval = 1000L * NANO_SEC_PER_MS;
 	private long mBackoff = 0L;
 	// Contention window
 	private static final long CW_MIN = RF.aCWmin; //TODO proper value
@@ -76,17 +77,25 @@ public class SendTask implements Runnable {
 			
 			case WAITING_FOR_DATA:
 				try {
-					if(System.nanoTime() - mLastBeaconEvent >= mBeaconInterval) {
+					mPacket = null;
+					
+					long beaconElapsed = System.nanoTime() - mLastBeaconEvent;
+					if(beaconElapsed >= mBeaconInterval) {
 						// we need to send a beacon
 						mPacket = mClock.generateBeacon();
 						mLastBeaconEvent = System.nanoTime();
 					} else {
-						mPacket = mSendQueue.take();
+						// TODO if no data is queued this blocks and doesn't send beacons
+						//mPacket = mSendQueue.take();
+						mPacket = mSendQueue.poll(mBeaconInterval, 
+												TimeUnit.NANOSECONDS);
 					}
-					mPacket.setSequenceNumber(mSequenceNumber);
-					mTryCount = 0;
-					setBackoff(mTryCount, mPacket.getType());
-					setState(WAITING_FOR_OPEN_CHANNEL);
+					if(mPacket != null) {
+						mPacket.setSequenceNumber(mSequenceNumber);
+						mTryCount = 0;
+						setBackoff(mTryCount, mPacket.getType());
+						setState(WAITING_FOR_OPEN_CHANNEL);
+					}
 				} catch (InterruptedException e) {
 					Log.e(TAG, e.getMessage());
 				}
@@ -123,7 +132,16 @@ public class SendTask implements Runnable {
 					// TODO handle problems with transmit
 					transmit(mPacket);
 					mTryCount++;
-					setState(WAITING_FOR_ACK);
+					if(mPacket.isBeacon()) {
+						// Don't bother with retries
+						mPacket = null;
+						setState(WAITING_FOR_DATA);
+					} else {
+						// Wait for an ack
+						setState(WAITING_FOR_ACK);
+					}
+				} else {
+					// Sleep how long?
 				}
 				break;
 				
@@ -145,6 +163,7 @@ public class SendTask implements Runnable {
 						mHostStatus.set(LinkLayer.TX_DELIVERED);
 						NSyncClock.dance();
 					}
+					// Moving on
 					mPacket = null;
 					setState(WAITING_FOR_DATA);
 				} else if(System.nanoTime() - mLastEvent >= mAckWaitNanoSec) {

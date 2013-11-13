@@ -28,6 +28,7 @@ public class NSyncClock {
 	 * @param p
 	 */
 	public void updateBeacon(Packet p) {
+		Log.i(TAG, "updating beacon packet");
 		// TODO plz implement me :(
 		// Note that the Packet's CRC needs to be recomputed after this change.
 	}
