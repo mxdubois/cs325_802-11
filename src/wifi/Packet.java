@@ -2,6 +2,8 @@ package wifi;
 
 import java.nio.ByteBuffer;
 
+import rf.RF;
+
 import wifi.LinkLayer;
 
 /**
@@ -14,8 +16,15 @@ public class Packet implements Comparable<Packet>{
 	
 	private static final String TAG = "Packet";
 	
+	// TODO wtf are correct values for these?
+	public static final long SIFS = RF.aSIFSTime * NSyncClock.NANO_SEC_PER_MS;
+	public static final long PIFS = 2*SIFS;
+	public static final long DIFS = 4*SIFS;
+	public static final long EIFS = 8*SIFS;
+	
 	public static final short MAX_SEQ_NUM = 4095; // 12 bits of data: (2^12)-1
-
+	public static final int MAX_DATA_BYTES = 2038;
+	public static final short BEACON_MAC = (short)(Math.pow(2,16)-1);
 	// Packet type codes
 	public static final int CTRL_DATA_CODE = 0;
 	public static final int CTRL_ACK_CODE = 1;
@@ -30,10 +39,14 @@ public class Packet implements Comparable<Packet>{
 	
 	private static final int HEADER_SIZE = 6;
 	private static final int CRC_SIZE = 4;
-
+	
 	private ByteBuffer mPacket;
 	private int mPacketSize; // Total packet length
 
+	// TODO CRC should be recomputed anytime a part of the packet is changed
+	// Perhaps we can flip a boolean at the end of the constructor to turn this
+	// behavior on.. it only needs to happen after the packet is constructed.
+	
 	public Packet(int type, short dest, short src, byte[] data, int len) {
 		// If len exceeds the size of the data buffer, add the entire buffer
 		int dataSize = Math.min(len, data.length);
@@ -75,12 +88,10 @@ public class Packet implements Comparable<Packet>{
 		mPacket.putShort(CONTROL_SIZE+DEST_ADDR_SIZE, src);
 
 		setRetry(false);
-		setSequenceNum((short)255);
-		
+		setSequenceNumber((short)255);
 	}
 
-	private void setSequenceNum(short seqNum) {		
-		
+	public void setSequenceNumber(short seqNum) {	
 		// TODO: determine behavior. overflow?
 		if(seqNum > MAX_SEQ_NUM) 
 			return;
@@ -126,6 +137,27 @@ public class Packet implements Comparable<Packet>{
 		return type;
 	}
 	
+	public boolean isBeacon() {
+		return (getType() == CTRL_BEACON_CODE);
+	}
+	
+	// TODO implement, seems like priority should be independent of IFS, idk
+	public long getPriority() {
+		return (long) getType();
+	}
+	
+	// FIXME implement with window wait times RIFS, SIFS, PIFS, DIFS, AIFS, EIFS
+	// we need to decide whether it makes sense to separate this from the packet
+	// type (and thus packet class) or not. i.e. is it dependent on factors
+	// other than the packet type? I'm esp curious about spec for EIFS here.
+	public long getIFS() {
+		long ifs = SIFS; // Default to ACK IFS
+		if(getType() == CTRL_DATA_CODE) {
+			ifs = DIFS;
+		}
+		return (long) getType();
+	}
+	
 	public boolean isRetry() {
 		byte firstByte = mPacket.get(0);
 		// Shift 4 bits right and remove any leading bits
@@ -145,7 +177,7 @@ public class Packet implements Comparable<Packet>{
 		return mPacketSize - HEADER_SIZE - CRC_SIZE;
 	}
 	
-	public short getSeqNum() {
+	public short getSequenceNumber() {
 		byte highByte = mPacket.get(0);
 		byte lowByte = mPacket.get(1);
 		
@@ -229,7 +261,7 @@ public class Packet implements Comparable<Packet>{
 		String str = "Packet. " +
 					"Type: " + getType() +
 					". Retry? " + isRetry() + 
-					". Seq num: " + getSeqNum() +
+					". Seq num: " + getSequenceNumber() +
 					". Src addr: " + getSrcAddr() +
 					". Dest addr: " + getDestAddr() +
 					". Data length: " + getDataLen() + 
@@ -239,7 +271,17 @@ public class Packet implements Comparable<Packet>{
 	}
 
 	@Override
-	public int compareTo(Packet packet) {
-		return getType() - packet.getType();
+	public int compareTo(Packet p) {
+		// Must return int, so can't just subtract long priorities
+		int ret = 0;
+//		if(getPriority() == p.getPriority()) {
+//			// tie break with seq number
+//			// TODO this probably doesn't work properly. We need a getIntSequenceNum function
+//			ret = (getSequenceNumber() > p.getSequenceNumber()) ? 1 : -1;
+//		} else 
+		if(getPriority() != p.getPriority()) {
+			ret = (getPriority() > p.getPriority()) ? 1 : -1;
+		}
+		return getType() - p.getType();
 	}
 }

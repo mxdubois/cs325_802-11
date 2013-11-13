@@ -16,11 +16,11 @@ public class RecvThread implements Runnable {
 	RF mRF;
 	short mHostAddr;
 	Queue<Packet> mRecvData;
-	Queue<Packet> mRecvAck;
+	Queue<Short> mRecvAck;
 	NSyncClock mClock;
 		
 	// TODO lots of parameters. Builder pattern?
-	public RecvThread(RF rf, NSyncClock clock, Queue<Packet> recvAck, Queue<Packet> recvData, short hostAddr) {
+	public RecvThread(RF rf, NSyncClock clock, Queue<Short> recvAck, Queue<Packet> recvData, short hostAddr) {
 		mRF = rf;
 		mClock = clock;
 		mRecvData = recvData;
@@ -54,7 +54,7 @@ public class RecvThread implements Runnable {
 	
 	private void consumeAck(Packet ackPack) {
 		Log.i(TAG, "Consuming ACK packet");
-		mRecvAck.add(ackPack);
+		mRecvAck.add(ackPack.getSequenceNumber());
 	}
 	
 	private void consumeBeacon(Packet beaconPacket) {
