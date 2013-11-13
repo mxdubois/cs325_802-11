@@ -130,11 +130,11 @@ public class SendTask implements Runnable {
 						mClock.updateBeacon(mPacket);
 					}
 					// TODO handle problems with transmit
-					transmit(mPacket);
+					int status = transmit(mPacket);
 					mTryCount++;
 					if(mPacket.isBeacon()) {
 						// Don't bother with retries
-						mPacket = null;
+						retirePacket();
 						setState(WAITING_FOR_DATA);
 					} else {
 						// Wait for an ack
@@ -164,7 +164,7 @@ public class SendTask implements Runnable {
 						NSyncClock.dance();
 					}
 					// Moving on
-					mPacket = null;
+					retirePacket();
 					setState(WAITING_FOR_DATA);
 				} else if(System.nanoTime() - mLastEvent >= mAckWaitNanoSec) {
 					// No ack, resend.
@@ -216,6 +216,11 @@ public class SendTask implements Runnable {
 			}
 			break;
 		}
+	}
+	
+	private void retirePacket() {
+		mPacket = null;
+		mSequenceNumber++;
 	}
 	
 	private boolean receivedAckFor(Packet p) {
