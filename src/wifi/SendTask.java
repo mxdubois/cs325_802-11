@@ -80,7 +80,7 @@ public class SendTask implements Runnable {
 					mPacket = null;
 					
 					long beaconElapsed = System.nanoTime() - mLastBeaconEvent;
-					if(beaconElapsed >= mBeaconInterval) {
+					if(false && beaconElapsed >= mBeaconInterval) {
 						// we need to send a beacon
 						mPacket = mClock.generateBeacon();
 						mLastBeaconEvent = System.nanoTime();

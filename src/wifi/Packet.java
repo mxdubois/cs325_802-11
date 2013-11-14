@@ -1,6 +1,7 @@
 package wifi;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 import rf.RF;
 
@@ -71,7 +72,7 @@ public class Packet implements Comparable<Packet>{
 	 */
 	private Packet(byte[] packet) {
 		mPacketSize = packet.length;
-		mPacket = ByteBuffer.wrap(packet);
+		mPacket = ByteBuffer.wrap(packet).order(ByteOrder.BIG_ENDIAN);
 	}
 
 	private void buildHeader(int type, short dest, short src) {
