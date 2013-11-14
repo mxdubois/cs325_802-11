@@ -2,6 +2,7 @@ package wifi;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
 
@@ -74,6 +75,9 @@ public class RecvTask implements Runnable {
 		}
 		str+= dataPacket.getDestAddr();
 		System.out.println(str);
+
+		Log.i(TAG, "Consuming DATA packet: " + dataPacket);
+		Log.i(TAG, "Data: " + Arrays.toString(dataPacket.getData()));
 		try {
 			// If space remains, add to end
 			if(mRecvData.remainingCapacity() != 0) {

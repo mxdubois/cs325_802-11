@@ -32,4 +32,5 @@ local.properties
 .DS_Store
 
 # Testing code
+brad_wifi.jar
 Tester.java

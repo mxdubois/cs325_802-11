@@ -67,6 +67,9 @@ public class LinkLayer implements Dot11Interface {
 	 * @param output  Output stream associated with GUI
 	 */
 	public LinkLayer(short ourMAC, PrintWriter output) {
+		
+		Log.setStream(output); // Write to the GUI
+		
 		mStatus = new AtomicInteger();
 		this.ourMAC = ourMAC;
 		this.output = output;
@@ -89,8 +92,7 @@ public class LinkLayer implements Dot11Interface {
 
 		mRecvDataOffset = 0;
 
-		if(debugLevel > 0)
-			Log.i(TAG, "Constructor ran.");
+		Log.d(TAG, "Constructor ran.");
 	}
 
 	// TODO do we need an init method?
@@ -113,8 +115,7 @@ public class LinkLayer implements Dot11Interface {
 			setStatus(ILLEGAL_ARGUMENT);
 		}
 
-		if(debugLevel > 0)
-			Log.i(TAG,"Sending "+len+" bytes to "+dest);
+		Log.d(TAG,"Queueing "+len+" bytes to "+dest);
 		int queued = 0;
 		int code = Packet.CTRL_DATA_CODE;
 		// We can only wrap Packet.MAX_DATA_BYTES per packet
@@ -137,8 +138,7 @@ public class LinkLayer implements Dot11Interface {
 	 * the Transmission object.  See docs for full description.
 	 */
 	public int recv(Transmission t) {
-		if(debugLevel > 0)
-			Log.i(TAG, "recv() called, waiting for queued data");
+		Log.i(TAG, "recv() called, waiting for queued data");
 		Packet recvData = null;
 		while(recvData == null) {
 			mRecvData.peek();
@@ -182,8 +182,6 @@ public class LinkLayer implements Dot11Interface {
  * Returns a current status code.  See docs for full description.
  */
 public int status() {
-	if(debugLevel > 0)
-		Log.i(TAG, "Faking a status() return value of 0");
 	return mStatus.get();
 }
 
@@ -191,8 +189,8 @@ public int status() {
  * Passes command info to your link layer.  See docs for full description.
  */
 public int command(int cmd, int val) {
-	if(debugLevel > 0)
-		Log.i(TAG, "Sending command "+cmd+" with value "+val);
+
+	Log.i(TAG, "Sending command "+cmd+" with value "+val);
 	switch(cmd) {
 	case 0 : // Options and Settings
 		output.println("LinkLayer: Current Settings: \n" + 
