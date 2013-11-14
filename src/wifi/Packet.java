@@ -212,6 +212,15 @@ public class Packet implements Comparable<Packet>{
 	public int getCRC() {
 		return mPacket.getInt(mPacketSize-CRC_SIZE);
 	}
+	
+	// Returns the data as a string 
+	public String dataToString() {
+		String str = "";
+		for(int i=0; i < getDataLen(); i++) {
+			str += (char) getData()[i];
+		}
+		return str;
+	}
 
 	/**
 	 * Parses a byte array into a packet

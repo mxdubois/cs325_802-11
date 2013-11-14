@@ -68,16 +68,6 @@ public class RecvTask implements Runnable {
 	
 	private void consumeData(Packet dataPacket) {
 		Log.i(TAG, "Consuming DATA packet");
-		byte[] data = dataPacket.getData();
-		String str = "";
-		for(int i=0; i < data.length; i++) {
-			str += (char) data[i];
-		}
-		str+= dataPacket.getDestAddr();
-		System.out.println(str);
-
-		Log.i(TAG, "Consuming DATA packet: " + dataPacket);
-		Log.i(TAG, "Data: " + Arrays.toString(dataPacket.getData()));
 		try {
 			// If space remains, add to end
 			if(mRecvData.remainingCapacity() != 0) {
