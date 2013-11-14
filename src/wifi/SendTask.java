@@ -9,7 +9,6 @@ import rf.RF;
 public class SendTask implements Runnable {
 	
 	private static final String TAG = "SendTask";
-	private static final boolean DEBUG = LinkLayer.debugLevel > 0;
 	
 	// STATES
 	private static final int INITIALIZED = 0;
@@ -43,7 +42,7 @@ public class SendTask implements Runnable {
 	// INTERVALS
 	private static final long NANO_SEC_PER_MS = NSyncClock.NANO_SEC_PER_MS;
 	private long mAckWaitNanoSec = 20L * NANO_SEC_PER_MS;
-	private long mBeaconInterval = 1000L * NANO_SEC_PER_MS;
+	private long mBeaconInterval = -1; //1000L * NANO_SEC_PER_MS;
 	private long mBackoff = 0L;
 	// Contention window
 	private static final long CW_MIN = RF.aCWmin; //TODO proper value
@@ -64,8 +63,8 @@ public class SendTask implements Runnable {
 		mClock = nSyncClock;
 		mHostStatus = hostStatus;
 		mAckWaitNanoSec = mClock.nanoAckWaitEst();
-		if(DEBUG) 
-			Log.i(TAG, TAG + " initialized!");
+		
+		Log.d(TAG, TAG + " initialized!");
 		setState(WAITING_FOR_DATA);
 	}
 	
@@ -80,7 +79,7 @@ public class SendTask implements Runnable {
 					mPacket = null;
 					
 					long beaconElapsed = System.nanoTime() - mLastBeaconEvent;
-					if(beaconElapsed >= mBeaconInterval) {
+					if(mBeaconInterval > -1 && beaconElapsed >= mBeaconInterval) {
 						// we need to send a beacon
 						mPacket = mClock.generateBeacon();
 						mLastBeaconEvent = System.nanoTime();
@@ -149,17 +148,13 @@ public class SendTask implements Runnable {
 				if(mTryCount >= MAX_TRY_COUNT || receivedAckFor(mPacket)) {
 					if(mTryCount >= MAX_TRY_COUNT) {
 						// we give up
-						if(DEBUG) {
-							Log.i(TAG, "Giving up on packet " 
-									+ mPacket.getSequenceNumber());
-						}
+						Log.d(TAG, "Giving up on packet " + mPacket.getSequenceNumber());
+
 						mHostStatus.set(LinkLayer.TX_FAILED);
 					} else {
 						// success!!
-						if(DEBUG) {
-							Log.i(TAG, "Sender received packet" 
-									+ mPacket.getSequenceNumber());
-						}
+						Log.d(TAG, "Sender received packet" + mPacket.getSequenceNumber());
+
 						mHostStatus.set(LinkLayer.TX_DELIVERED);
 						NSyncClock.dance();
 					}
@@ -168,8 +163,7 @@ public class SendTask implements Runnable {
 					setState(WAITING_FOR_DATA);
 				} else if(System.nanoTime() - mLastEvent >= mAckWaitNanoSec) {
 					// No ack, resend.
-					if(DEBUG)
-						Log.i(TAG, "No ACK received.");
+					Log.d(TAG, "No ACK received. Collision has occured.");
 					mPacket.setRetry(true);
 					setBackoff(mTryCount, mPacket.getType());
 					setState(WAITING_FOR_OPEN_CHANNEL);
@@ -182,8 +176,7 @@ public class SendTask implements Runnable {
 			
 		} // End while
 		
-		if(DEBUG) 
-			Log.e(TAG, "Interrupted!");
+		Log.e(TAG, "Interrupted!");
 		// TODO cleanup? Idk.. this is Java, prolly doesn't matter.
 	}
 	
@@ -192,28 +185,21 @@ public class SendTask implements Runnable {
 		mState = newState;
 		switch(newState) {
 		case WAITING_FOR_DATA :
-			if(DEBUG) 
-				Log.i(TAG, "Waiting for data.");
+			Log.d(TAG, "Waiting for data.");
 			break;
 		case WAITING_FOR_OPEN_CHANNEL:
-			if(DEBUG) {
-				Log.i(TAG, "Waiting for open channel. Try count: " + mTryCount);
-			}
+//			Log.d(TAG, "Waiting for open channel. Try count: " + mTryCount);
 			break;
 		case WAITING_PACKET_IFS:
 			long p = mPacket.getPriority();
-			if(DEBUG) 
-				Log.i(TAG, "Waiting packet priority: " + p);
+//			Log.d(TAG, "Waiting packet priority: " + p);
 			break;
 		case WAITING_BACKOFF:
-			if(DEBUG) 
-				Log.i(TAG, "Waiting backoff: " + mBackoff);
+//			Log.d(TAG, "Waiting backoff: " + mBackoff);
 			break;
 		case WAITING_FOR_ACK:
-			if(DEBUG) {
-				double ms = mAckWaitNanoSec / NANO_SEC_PER_MS;
-				Log.i(TAG, "Waiting " + ms + "ms for ACK.");
-			}
+			double ms = mAckWaitNanoSec / NANO_SEC_PER_MS;
+//			Log.d(TAG, "Waiting " + ms + "ms for ACK.");
 			break;
 		}
 	}
@@ -261,15 +247,10 @@ public class SendTask implements Runnable {
 			// Get a random backoff in the range [0,mCW]
 			mBackoff = Utilities.nextLong(mCW + 1L) * A_SLOT_TIME_NANO;
 		}
-		Log.i(TAG, "tryCount: " + mTryCount);
-		Log.i(TAG, "mCW: " + mCW);
-		Log.i(TAG, "backoff: " + mBackoff);
 	}
 	
 	private int transmit(Packet p) {
-		if(DEBUG) {
-			Log.i(TAG, "Transmitting the following packet: \n" + p.toString());
-		}
+		Log.i(TAG, "Transmitting the following packet, try " + mTryCount + "\n    " + p.toString());
 		return mRF.transmit(p.getBytes());
 	}
 	
