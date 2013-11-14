@@ -53,7 +53,7 @@ public class Packet implements Comparable<Packet>{
 		int dataSize = Math.min(len, data.length);
 
 		mPacketSize = HEADER_SIZE + CRC_SIZE + dataSize;
-		mPacket = ByteBuffer.allocate(mPacketSize);
+		mPacket = ByteBuffer.allocate(mPacketSize).order(ByteOrder.BIG_ENDIAN);
 
 		buildHeader(type, dest, src);
 		
@@ -240,7 +240,10 @@ public class Packet implements Comparable<Packet>{
 	public static short parseDest(byte[] packet) {
 		short dest = INVALID_PACKET;
 		if(packet.length > CONTROL_SIZE + DEST_ADDR_SIZE)
-			dest = ByteBuffer.wrap(packet, CONTROL_SIZE, DEST_ADDR_SIZE).getShort();
+			dest = ByteBuffer
+					.wrap(packet, CONTROL_SIZE, DEST_ADDR_SIZE)
+					.order(ByteOrder.BIG_ENDIAN)
+					.getShort();
 		return dest;
 	}
 
