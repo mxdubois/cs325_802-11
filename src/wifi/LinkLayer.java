@@ -49,7 +49,8 @@ public class LinkLayer implements Dot11Interface {
 	private Thread mSendThread;
 	private SendTask mSendTask;
 
-	private int mRecvDataOffset;
+	private int mLastRecvDataOffset;
+	private Packet mLastRecvData;
 
 	private NSyncClock mClock;
 	private AtomicInteger mStatus;
@@ -90,7 +91,9 @@ public class LinkLayer implements Dot11Interface {
 		mSendThread = new Thread(mSendTask);
 		mSendThread.start();
 
-		mRecvDataOffset = 0;
+		mLastRecvDataOffset = 0;
+		mLastRecvData = null;
+		
 
 		Log.d(TAG, "Constructor ran.");
 	}
@@ -139,41 +142,40 @@ public class LinkLayer implements Dot11Interface {
 	 */
 	public int recv(Transmission t) {
 		Log.i(TAG, "recv() called, waiting for queued data");
-		Packet recvData = null;
-		while(recvData == null) {
-			mRecvData.peek();
-			if(recvData == null)
-				try {
-					Thread.sleep(RECV_SLEEP_MILLIS);
-				} catch (InterruptedException e) {
-					Log.e(TAG, "Interrupted while sleeping in recv()");
-					e.printStackTrace();
-				}
+		
+		// Only take a new packet if we've fully consumed the last packet
+		if(mLastRecvData == null) {
+			try {
+				mLastRecvData = mRecvData.take();
+			} catch (InterruptedException e) {
+				Log.e(TAG, "recv() interrupted while blocking on take()");
+				e.printStackTrace();
+				return 0;
+			}
 		}
 
 		// Put addresses in Transmission object
-		t.setDestAddr(recvData.getDestAddr());
-		t.setSourceAddr(recvData.getSrcAddr());
-
+		t.setDestAddr(mLastRecvData.getDestAddr());
+		t.setSourceAddr(mLastRecvData.getSrcAddr());
+		
 		int dataLength;
 		int transBufLength = t.getBuf().length;
-		byte[] data = recvData.getData();
-		if(data.length - mRecvDataOffset <= transBufLength) {
-			t.setBuf(Arrays.copyOfRange(data, mRecvDataOffset, data.length-1));
-			dataLength = data.length - mRecvDataOffset;
-			mRecvDataOffset = 0;
-			try {
-				mRecvData.take(); // All packet data has been consumed, so remove packet from queue
-			} catch (InterruptedException e) {
-				Log.e(TAG, "Interrupted while blocking on receive data take()");
-				e.printStackTrace();
-			} 
+		byte[] data = mLastRecvData.getData();
+		// Check if data will fit in the Transmission buffer
+		if(data.length - mLastRecvDataOffset <= transBufLength) {
+			t.setBuf(Arrays.copyOfRange(data, mLastRecvDataOffset, data.length));
+			dataLength = data.length - mLastRecvDataOffset;
+			
+			// Reset offset and consume packet
+			mLastRecvDataOffset = 0;
+			mLastRecvData = null;
 		} else {
-			// If packet length exceeds buffer length, copy in subarray
-			t.setBuf(Arrays.copyOfRange(data, 0, transBufLength));
+			// If packet length exceeds buffer length, copy in as much as we can
+			t.setBuf(Arrays.copyOfRange(data, mLastRecvDataOffset, transBufLength));
 			dataLength = transBufLength;  
+			
 			// Set offset into packet data for next call, and don't consume packet
-			mRecvDataOffset = transBufLength;
+			mLastRecvDataOffset = mLastRecvDataOffset + transBufLength;
 		}                
 		return dataLength;
 	}
