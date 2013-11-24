@@ -41,7 +41,8 @@ public class RecvTask implements Runnable {
 		while(true) {
 			byte[] recvTrans = mRF.receive();
 			Log.i(TAG, "RecvThread got a transmission");
-			if(true || Packet.parseDest(recvTrans) == mHostAddr) { // Only consume packets sent to this host
+			short packDest = Packet.parseDest(recvTrans);
+			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) { // Only consume packets sent to this host
 				Packet packet = Packet.parse(recvTrans);
 				int type = packet.getType();
 				if(type == Packet.CTRL_ACK_CODE) {
@@ -69,13 +70,15 @@ public class RecvTask implements Runnable {
 	private void consumeData(Packet dataPacket) {
 		Log.i(TAG, "Consuming DATA packet");
 		try {
-			// If space remains, add to end
-			if(mRecvData.remainingCapacity() != 0) {
-				mRecvData.put(dataPacket);
-			// If queue is full, remove oldest element
-			} else {
-				mRecvData.take();
-				mRecvData.put(dataPacket);
+			synchronized(mRecvData) {
+				// If space remains, add to end
+				if(mRecvData.remainingCapacity() != 0) {
+					mRecvData.put(dataPacket);
+				// If queue is full, remove oldest element
+				} else {
+					mRecvData.take();
+					mRecvData.put(dataPacket);
+				}
 			}
 		} catch(InterruptedException ex) {
 			Log.e(TAG, "RevTask interrupted when blocking on the receive data queue");
