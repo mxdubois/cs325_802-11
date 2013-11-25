@@ -252,6 +252,7 @@ public class SendTask implements Runnable {
 			// Get a random backoff in the range [0,mCW]
 			mBackoff = Utilities.nextLong(mCW + 1L) * A_SLOT_TIME_NANO;
 			
+			// If slot selection override
 			if(mSlotSelectionPolicy != 0) {
 				// Instead, take mCW as backoff
 				mBackoff = mCW * A_SLOT_TIME_NANO;
