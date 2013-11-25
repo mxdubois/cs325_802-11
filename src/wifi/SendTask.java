@@ -90,8 +90,11 @@ public class SendTask implements Runnable {
 												TimeUnit.NANOSECONDS);
 					}
 					if(mPacket != null) {
-						Short nextSeq = getNextSeqNum(mPacket.getDestAddr());
-						mPacket.setSequenceNumber(nextSeq);
+						// ACK sequence numbers are already set by the RecvTask
+						if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
+							Short nextSeq = getNextSeqNum(mPacket.getDestAddr());
+							mPacket.setSequenceNumber(nextSeq);
+						}
 						mTryCount = 0;
 						setBackoff(mTryCount, mPacket.getType());
 						setState(WAITING_FOR_OPEN_CHANNEL);
@@ -106,7 +109,10 @@ public class SendTask implements Runnable {
 					setState(WAITING_PACKET_IFS);
 				} else {
 					try {
-						Thread.sleep(0, (int)(A_SLOT_TIME_NANO/10)); // TODO sleep? for how long?
+						// Clamp to deal with a sleep illegal argument exception. This is a temporary fix
+						// http://stackoverflow.com/questions/4281668/java-thread-sleep-exception
+						int nanoWait = Utilities.longClamp(A_SLOT_TIME_NANO, 999999, 0);
+						Thread.sleep(0, nanoWait); // TODO sleep? for how long?
 						
 					} catch(InterruptedException e) {
 						Log.e(TAG, e.getMessage());		
@@ -139,13 +145,13 @@ public class SendTask implements Runnable {
 					// TODO handle problems with transmit
 					int status = transmit(mPacket);
 					mTryCount++;
-					if(mPacket.isBeacon()) {
-						// Don't bother with retries
-						retirePacket();
-						setState(WAITING_FOR_DATA);
-					} else {
+					if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
 						// Wait for an ack
 						setState(WAITING_FOR_ACK);
+					} else {
+						// Don't bother with retries for ACKS and BEACONS
+						retirePacket();
+						setState(WAITING_FOR_DATA);
 					}
 				} else {
 					// Sleep how long?

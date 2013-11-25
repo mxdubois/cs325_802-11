@@ -23,6 +23,10 @@ public class Utilities {
 			bits = (random.nextLong() << 1) >>> 1;
 			val = bits % n;
 		} while (bits-val+(n-1) < 0L);
-			return val;
-		}
+		return val;
 	}
+	
+	public static int longClamp(long val, int max, int min) {
+		return (int) Math.max(Math.min(max, val), min);
+	}
+}
