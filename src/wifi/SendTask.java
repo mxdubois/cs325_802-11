@@ -30,7 +30,7 @@ public class SendTask implements Runnable {
 	private Packet mPacket;
 	private int mState = INITIALIZED;
 	private int mSlotSelectionPolicy;
-	private HashMap<Short, Short> mNextSeqs; // Maps dest addrs to next sequence nums
+	private HashMap<Short, Short> mLastSeqs; // Maps dest addrs to last sequence nums
 	private long mLastEvent;
 	private long mLastBeaconEvent;
 	
@@ -91,7 +91,7 @@ public class SendTask implements Runnable {
 												TimeUnit.NANOSECONDS);
 					}
 					if(mPacket != null) {
-						Short nextSeq = getSeqNum(mPacket.getDestAddr());
+						Short nextSeq = getNextSeqNum(mPacket.getDestAddr());
 						mPacket.setSequenceNumber(nextSeq);
 						mTryCount = 0;
 						setBackoff(mTryCount, mPacket.getType());
@@ -289,19 +289,16 @@ public class SendTask implements Runnable {
 	 * @param destAddr Destination address
 	 * @return The next sequence number for specified destination address
 	 */
-	private Short getSeqNum(short destAddr) {
-		Short curSeqNum = mNextSeqs.get(destAddr);
-		if(curSeqNum == null) {
-			// We have never sent to this address. We return 0.
+	private Short getNextSeqNum(short destAddr) {
+		Short curSeqNum = mLastSeqs.get(destAddr);
+		if(curSeqNum == null || curSeqNum + 1 > Packet.MAX_SEQ_NUM) {
+			// We have never sent to this address, or next seq num exceeds max
 			curSeqNum = 0;
+			mLastSeqs.put(destAddr, (short) 0);
+		} else {
+			mLastSeqs.put(destAddr, ++curSeqNum);
 		}
 
-		// Increment sequence number
-		if(curSeqNum++ > Packet.MAX_SEQ_NUM)
-			mNextSeqs.put(destAddr, (short) 0);
-		else 
-			mNextSeqs.put(destAddr, curSeqNum);
-		
 		return curSeqNum;
 	}
 }

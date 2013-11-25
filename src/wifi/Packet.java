@@ -284,6 +284,21 @@ public class Packet implements Comparable<Packet>{
 		
 		return str;		
 	}
+	
+	@Override
+	public boolean equals(Object obj) {
+		if(obj == null) 
+			return false;
+		else if(!(obj instanceof Packet))
+			return false;
+		else {
+			Packet compare = (Packet) obj;
+			// TODO what should be compared
+			return compare.getSequenceNumber() == getSequenceNumber() &&
+					compare.getSrcAddr() == getSrcAddr();
+					
+		}
+	}
 
 	@Override
 	public int compareTo(Packet p) {

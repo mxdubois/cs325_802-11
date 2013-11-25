@@ -71,17 +71,18 @@ public class RecvTask implements Runnable {
 		Log.i(TAG, "Consuming DATA packet");
 		try {
 			synchronized(mRecvData) {
-				// If space remains, add to end
-				if(mRecvData.remainingCapacity() != 0) {
-					mRecvData.put(dataPacket);
 				// If queue is full, remove oldest element
-				} else {
+				if(mRecvData.remainingCapacity() == 0)
 					mRecvData.take();
-					mRecvData.put(dataPacket);
-				}
+				
+				// If we've already received this packet, log an error but queue anyway
+				if(mRecvData.contains(dataPacket))
+					Log.e(TAG, "Received duplicate data packet from address " + dataPacket.getSrcAddr() +
+							", seq num " + dataPacket.getSequenceNumber());
+				mRecvData.put(dataPacket);
 			}
 		} catch(InterruptedException ex) {
-			Log.e(TAG, "RevTask interrupted when blocking on the receive data queue");
+			Log.e(TAG, "RecvTask interrupted when blocking on the receive data queue");
 		}
 	}
 
