@@ -242,17 +242,20 @@ public class SendTask implements Runnable {
 			throw new IllegalStateException(TAG + ": tryCount cannot be < 0");
 		if(pType == Packet.CTRL_BEACON_CODE) {
 			mBackoff = 0L;
-		} else if(mSlotSelectionPolicy != 0) {
-			// Override specification for debugging
-			mBackoff = CW_MAX * A_SLOT_TIME_NANO;
 		} else {
 			// Reset mCW if tries == 0
-			// Double mCW and add one after every retry
+			// else double mCW and add one after every retry
 			long newCW = (tryCount > 0) ? (mCW * 2 + 1L) : CW_MIN;
+
 			// but clamp it to our specified range
 			mCW = Math.max(CW_MIN, Math.min(newCW, CW_MAX));
 			// Get a random backoff in the range [0,mCW]
 			mBackoff = Utilities.nextLong(mCW + 1L) * A_SLOT_TIME_NANO;
+			
+			if(mSlotSelectionPolicy != 0) {
+				// Instead, take mCW as backoff
+				mBackoff = mCW * A_SLOT_TIME_NANO;
+			}
 		}
 	}
 	
