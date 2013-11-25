@@ -41,7 +41,7 @@ public class RecvTask implements Runnable {
 			byte[] recvTrans = mRF.receive();
 			Log.i(TAG, "RecvThread got a transmission");
 			short packDest = Packet.parseDest(recvTrans);
-		   // Only consume beacons and packets sent to this host
+		   // Only consume beacons and data packets sent to this host
 			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) {
 				Packet packet = Packet.parse(recvTrans);
 				int type = packet.getType();
@@ -91,8 +91,8 @@ public class RecvTask implements Runnable {
 		
 		try {
 			// Prepare and queue ACK
-			Packet ack = new Packet(Packet.CTRL_ACK_CODE, dataPacket.getDestAddr(), 
-					dataPacket.getSrcAddr(), new byte[0], 0, dataPacket.getSequenceNumber());
+			Packet ack = new Packet(Packet.CTRL_ACK_CODE, dataPacket.getSrcAddr(), 
+					mHostAddr, new byte[0], 0, dataPacket.getSequenceNumber());
 			mSendQueue.put(ack);
 		} catch (InterruptedException e) {
 			Log.e(TAG, "RecvTask interrupted when blocking on the send queue");
