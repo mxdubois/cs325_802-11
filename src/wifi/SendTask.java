@@ -104,7 +104,14 @@ public class SendTask implements Runnable {
 			case WAITING_FOR_OPEN_CHANNEL:
 				if(!mRF.inUse()) {
 					setState(WAITING_PACKET_IFS);
-				} else; // TODO sleep? for how long?
+				} else {
+					try {
+						Thread.sleep(0, (int)(A_SLOT_TIME_NANO/10)); // TODO sleep? for how long?
+						
+					} catch(InterruptedException e) {
+						Log.e(TAG, e.getMessage());		
+					}
+				}
 				break;
 			
 			case WAITING_PACKET_IFS:
