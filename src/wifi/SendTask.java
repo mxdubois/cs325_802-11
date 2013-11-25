@@ -56,7 +56,7 @@ public class SendTask implements Runnable {
 			RF rf,
 			NSyncClock nSyncClock,
 			AtomicInteger hostStatus,
-			PriorityBlockingQueue sendQueue, 
+			PriorityBlockingQueue<Packet> sendQueue, 
 			BlockingQueue<Packet> recvAckQueue) 
 	{		
 		mRF = rf;
@@ -65,7 +65,7 @@ public class SendTask implements Runnable {
 		mClock = nSyncClock;
 		mHostStatus = hostStatus;
 		mAckWaitNanoSec = mClock.nanoAckWaitEst();
-		
+		mLastSeqs = new HashMap<Short,Short>();
 		Log.d(TAG, TAG + " initialized!");
 		setState(WAITING_FOR_DATA);
 	}
