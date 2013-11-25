@@ -1,8 +1,6 @@
 package wifi;
 
-import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.PriorityBlockingQueue;
 
 import rf.RF;
 
@@ -18,13 +16,13 @@ public class RecvTask implements Runnable {
 	RF mRF;
 	short mHostAddr;
 	BlockingQueue<Packet> mRecvData;
-	BlockingQueue<Short> mRecvAck;
+	BlockingQueue<Packet> mRecvAck;
 	BlockingQueue<Packet> mSendQueue;
 	NSyncClock mClock;
 		
 	// TODO lots of parameters. Builder pattern?
 	public RecvTask(RF rf, NSyncClock clock, BlockingQueue<Packet> sendQueue,
-			BlockingQueue<Short> recvAck, BlockingQueue<Packet> recvData, short hostAddr) {
+			BlockingQueue<Packet> recvAck, BlockingQueue<Packet> recvData, short hostAddr) {
 		mRF = rf;
 		mClock = clock;
 		mRecvData = recvData;
@@ -61,7 +59,7 @@ public class RecvTask implements Runnable {
 	private void consumeAck(Packet ackPack) {
 		Log.i(TAG, "Consuming ACK packet");
 		try {
-			mRecvAck.put(ackPack.getSequenceNumber());
+			mRecvAck.put(ackPack);
 		} catch (InterruptedException e) {
 			Log.e(TAG, "RecvTask interrupted while blocking on the received ACK queue");
 			e.printStackTrace();

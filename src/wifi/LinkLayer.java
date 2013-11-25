@@ -1,7 +1,6 @@
 package wifi;
 import java.io.PrintWriter;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -33,7 +32,7 @@ public class LinkLayer implements Dot11Interface {
 	public static final int INSUFFICIENT_BUFFER_SPACE = 10;
 
 	public static final int RECV_DATA_BUFFER_SIZE = 300;
-	private static final int RECV_SLEEP_MILLIS = 100;
+	public static final int RECV_ACK_BUFFER_SIZE = 100;
 
 
 	private RF theRF;           // You'll need one of these eventually
@@ -41,7 +40,7 @@ public class LinkLayer implements Dot11Interface {
 	private PrintWriter output; // The output stream we'll write to
 
 	private BlockingQueue<Packet> mRecvData;
-	private PriorityBlockingQueue<Short> mRecvAck;
+	private BlockingQueue<Packet> mRecvAck;
 	private PriorityBlockingQueue<Packet> mSendQueue;
 
 	private Thread mRecvThread;
@@ -78,7 +77,7 @@ public class LinkLayer implements Dot11Interface {
 		theRF = new RF(null, null);
 
 		mRecvData = new ArrayBlockingQueue<Packet>(RECV_DATA_BUFFER_SIZE);
-		mRecvAck = new PriorityBlockingQueue<Short>();
+		mRecvAck = new ArrayBlockingQueue<Packet>(RECV_ACK_BUFFER_SIZE);
 		mSendQueue = new PriorityBlockingQueue<Packet>();
 
 		mClock = new NSyncClock();

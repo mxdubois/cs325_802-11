@@ -1,6 +1,7 @@
 package wifi;
 
 import java.util.HashMap;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -22,7 +23,7 @@ public class SendTask implements Runnable {
 	// ESSENTIALS
 	private RF mRF;
 	private PriorityBlockingQueue<Packet> mSendQueue;
-	private PriorityBlockingQueue<Short> mRecvAckQueue;
+	private BlockingQueue<Packet> mRecvAckQueue;
 	private NSyncClock mClock;
 	private AtomicInteger mHostStatus;
 	
@@ -56,7 +57,7 @@ public class SendTask implements Runnable {
 			NSyncClock nSyncClock,
 			AtomicInteger hostStatus,
 			PriorityBlockingQueue sendQueue, 
-			PriorityBlockingQueue<Short> recvAckQueue) 
+			BlockingQueue<Packet> recvAckQueue) 
 	{		
 		mRF = rf;
 		mSendQueue = sendQueue;
@@ -216,17 +217,14 @@ public class SendTask implements Runnable {
 		// synchronized block b/c otherwise other threads might screw us up
 		// we want to process the snapshot of the queue for this moment
 		synchronized(mRecvAckQueue) {
-			if(mRecvAckQueue.peek() != null) {
-				short seqNum = p.getSequenceNumber();
-				short recievedSeqNum = mRecvAckQueue.peek();
-				// Discard seqNums less than current 
-				// and duplicates equal to current
-				while(mRecvAckQueue.peek() != null 
-						&& mRecvAckQueue.peek() <= seqNum) {
-					recievedSeqNum = mRecvAckQueue.poll();
+
+			while(mRecvAckQueue.peek() != null) {
+				Packet ack = mRecvAckQueue.poll();
+				if(ack.getSequenceNumber() == p.getSequenceNumber() &&
+						ack.getSrcAddr() == p.getDestAddr()) {
+					recvdAck = true;
+					break; // Found an ack, end the search
 				}
-				// If current seqNum was recvd, it will remain in receivedSeqNum
-				recvdAck = (recievedSeqNum == seqNum);
 			}
 		}
 		return recvdAck;
