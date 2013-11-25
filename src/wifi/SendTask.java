@@ -1,5 +1,6 @@
 package wifi;
 
+import java.util.HashMap;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -29,7 +30,7 @@ public class SendTask implements Runnable {
 	private Packet mPacket;
 	private int mState = INITIALIZED;
 	private int mSlotSelectionPolicy;
-	private short mSequenceNumber = 0;
+	private HashMap<Short, Short> mNextSeqs; // Maps dest addrs to next sequence nums
 	private long mLastEvent;
 	private long mLastBeaconEvent;
 	
@@ -90,7 +91,8 @@ public class SendTask implements Runnable {
 												TimeUnit.NANOSECONDS);
 					}
 					if(mPacket != null) {
-						mPacket.setSequenceNumber(mSequenceNumber);
+						Short nextSeq = getSeqNum(mPacket.getDestAddr());
+						mPacket.setSequenceNumber(nextSeq);
 						mTryCount = 0;
 						setBackoff(mTryCount, mPacket.getType());
 						setState(WAITING_FOR_OPEN_CHANNEL);
@@ -206,7 +208,7 @@ public class SendTask implements Runnable {
 	
 	private void retirePacket() {
 		mPacket = null;
-		mSequenceNumber++;
+//		mSequenceNumber++;
 	}
 	
 	private boolean receivedAckFor(Packet p) {
@@ -270,8 +272,8 @@ public class SendTask implements Runnable {
 	}
 	
 	/**
-	 * Set the slut selection policy
-	 * @param policy - int, 0 always MAX_CW, non-zero choose sluts at random
+	 * Set the slot selection policy
+	 * @param policy - int, 0 always MAX_CW, non-zero choose slots at random
 	 */
 	protected void setSlotSelectionPolicy(int policy) {
 		mSlotSelectionPolicy = policy;
@@ -281,5 +283,25 @@ public class SendTask implements Runnable {
 		return mSlotSelectionPolicy;
 	}
 	
-	
+	/**
+	 * Gets the next sequence number for the specified destination address.
+	 * A call to this method will increment the sequence number
+	 * @param destAddr Destination address
+	 * @return The next sequence number for specified destination address
+	 */
+	private Short getSeqNum(short destAddr) {
+		Short curSeqNum = mNextSeqs.get(destAddr);
+		if(curSeqNum == null) {
+			// We have never sent to this address. We return 0.
+			curSeqNum = 0;
+		}
+
+		// Increment sequence number
+		if(curSeqNum++ > Packet.MAX_SEQ_NUM)
+			mNextSeqs.put(destAddr, (short) 0);
+		else 
+			mNextSeqs.put(destAddr, curSeqNum);
+		
+		return curSeqNum;
+	}
 }

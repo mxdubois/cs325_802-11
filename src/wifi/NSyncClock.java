@@ -4,7 +4,7 @@ public class NSyncClock {
 	
 	private static final boolean DEBUG = LinkLayer.debugLevel > 0;
 	private static final String TAG = "NSyncClock";
-	public final static short BEACON_ADDR = -1;
+	public final static short BEACON_ADDR = (short) 0xFFFF;
 	private long mOffset = 0L; // offset in nanoseconds
 	
 	public static final long NANO_SEC_PER_MS = 1000000L;
