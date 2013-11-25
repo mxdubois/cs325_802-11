@@ -1,10 +1,8 @@
 package wifi;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.util.Arrays;
 import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.PriorityBlockingQueue;
 
 import rf.RF;
 
@@ -20,16 +18,19 @@ public class RecvTask implements Runnable {
 	RF mRF;
 	short mHostAddr;
 	BlockingQueue<Packet> mRecvData;
-	Queue<Short> mRecvAck;
+	BlockingQueue<Short> mRecvAck;
+	BlockingQueue<Packet> mSendQueue;
 	NSyncClock mClock;
 		
 	// TODO lots of parameters. Builder pattern?
-	public RecvTask(RF rf, NSyncClock clock, Queue<Short> recvAck, BlockingQueue<Packet> recvData, short hostAddr) {
+	public RecvTask(RF rf, NSyncClock clock, BlockingQueue<Packet> sendQueue,
+			BlockingQueue<Short> recvAck, BlockingQueue<Packet> recvData, short hostAddr) {
 		mRF = rf;
 		mClock = clock;
 		mRecvData = recvData;
 		mRecvAck = recvAck;
 		mHostAddr = hostAddr;
+		mSendQueue = sendQueue;
 		Log.i(TAG, TAG + " initialized");
 	}
 	
@@ -42,7 +43,8 @@ public class RecvTask implements Runnable {
 			byte[] recvTrans = mRF.receive();
 			Log.i(TAG, "RecvThread got a transmission");
 			short packDest = Packet.parseDest(recvTrans);
-			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) { // Only consume packets sent to this host
+		   // Only consume beacons and packets sent to this host
+			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) {
 				Packet packet = Packet.parse(recvTrans);
 				int type = packet.getType();
 				if(type == Packet.CTRL_ACK_CODE) {
@@ -52,14 +54,18 @@ public class RecvTask implements Runnable {
 				} else if(type == Packet.CTRL_DATA_CODE) {
 					consumeData(packet);
 				}
-			}
-			
+			}	
 		}
 	}
 	
 	private void consumeAck(Packet ackPack) {
 		Log.i(TAG, "Consuming ACK packet");
-		mRecvAck.add(ackPack.getSequenceNumber());
+		try {
+			mRecvAck.put(ackPack.getSequenceNumber());
+		} catch (InterruptedException e) {
+			Log.e(TAG, "RecvTask interrupted while blocking on the received ACK queue");
+			e.printStackTrace();
+		}
 	}
 	
 	private void consumeBeacon(Packet beaconPacket) {
@@ -83,6 +89,15 @@ public class RecvTask implements Runnable {
 			}
 		} catch(InterruptedException ex) {
 			Log.e(TAG, "RecvTask interrupted when blocking on the receive data queue");
+		}
+		
+		try {
+			// Prepare and queue ACK
+			Packet ack = new Packet(Packet.CTRL_ACK_CODE, dataPacket.getDestAddr(), 
+					dataPacket.getSrcAddr(), new byte[0], 0, dataPacket.getSequenceNumber());
+			mSendQueue.put(ack);
+		} catch (InterruptedException e) {
+			Log.e(TAG, "RecvTask interrupted when blocking on the send queue");
 		}
 	}
 

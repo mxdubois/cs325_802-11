@@ -83,7 +83,7 @@ public class LinkLayer implements Dot11Interface {
 
 		mClock = new NSyncClock();
 
-		mRecvTask = new RecvTask(theRF, mClock, mRecvAck, mRecvData, ourMAC);
+		mRecvTask = new RecvTask(theRF, mClock, mSendQueue, mRecvAck, mRecvData, ourMAC);
 		mRecvThread = new Thread(mRecvTask);
 		mRecvThread.start();
 

@@ -49,13 +49,17 @@ public class Packet implements Comparable<Packet>{
 	// behavior on.. it only needs to happen after the packet is constructed.
 	
 	public Packet(int type, short dest, short src, byte[] data, int len) {
+		this(type, dest, src, data, len, (short) 0);
+	}
+	
+	public Packet(int type, short dest, short src, byte[] data, int len, short seqNum) {
 		// If len exceeds the size of the data buffer, add the entire buffer
 		int dataSize = Math.min(len, data.length);
 
 		mPacketSize = HEADER_SIZE + CRC_SIZE + dataSize;
 		mPacket = ByteBuffer.allocate(mPacketSize).order(ByteOrder.BIG_ENDIAN);
 
-		buildHeader(type, dest, src);
+		buildHeader(type, dest, src, seqNum);
 		
 		// Insert data into packet buffer.
 		for(int i = 0; i < dataSize; i++)
@@ -75,7 +79,7 @@ public class Packet implements Comparable<Packet>{
 		mPacket = ByteBuffer.wrap(packet).order(ByteOrder.BIG_ENDIAN);
 	}
 
-	private void buildHeader(int type, short dest, short src) {
+	private void buildHeader(int type, short dest, short src, short seqNum) {
 		byte firstByte = mPacket.get(0);
 
 		// Set type. Shift type 5 bits left and remove trailing bits
@@ -89,7 +93,7 @@ public class Packet implements Comparable<Packet>{
 		mPacket.putShort(CONTROL_SIZE+DEST_ADDR_SIZE, src);
 
 		setRetry(false);
-		setSequenceNumber((short)20);
+		setSequenceNumber(seqNum);
 	}
 
 	public void setSequenceNumber(short seqNum) {	
