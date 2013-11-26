@@ -1,5 +1,6 @@
 package wifi;
 
+import java.util.HashMap;
 import java.util.concurrent.BlockingQueue;
 
 import rf.RF;
@@ -18,6 +19,7 @@ public class RecvTask implements Runnable {
 	BlockingQueue<Packet> mRecvData;
 	BlockingQueue<Packet> mRecvAck;
 	BlockingQueue<Packet> mSendQueue;
+	HashMap<Short, Short> mLastSeqs; // Maps src addrs to last seq nums received
 	NSyncClock mClock;
 		
 	// TODO lots of parameters. Builder pattern?
@@ -71,27 +73,63 @@ public class RecvTask implements Runnable {
 		mClock.consumeBacon(beaconPacket);
 	}
 	
+	/**
+	 * Consumes a data packet, ensuring that the specified packet contains the 
+	 * expected sequence number.
+	 * @param dataPacket Data packet to deliver to above layer
+	 */
 	private void consumeData(Packet dataPacket) {
 		Log.i(TAG, "Consuming DATA packet");
 		try {
 			synchronized(mRecvData) {
-				// If queue is full, remove oldest element
+				// If queue is full, remove oldest element. This class is the only producer,
+				// so we don't have to synchronize mRecvData during the rest of this method
 				if(mRecvData.remainingCapacity() == 0)
 					mRecvData.take();
-				
-				// If we've already received this packet, log an error but queue anyway
-				if(mRecvData.contains(dataPacket))
-					Log.e(TAG, "Received duplicate data packet from address " + dataPacket.getSrcAddr() +
-							", seq num " + dataPacket.getSequenceNumber());
-				mRecvData.put(dataPacket);
 			}
 		} catch(InterruptedException ex) {
 			Log.e(TAG, "RecvTask interrupted when blocking on the receive data queue");
 		}
 		
+		Short lastSeqNum = mLastSeqs.get(dataPacket.getSrcAddr());
+		if(lastSeqNum == null)
+			lastSeqNum = 0;
+		
+		short packetSeqNum = dataPacket.getSequenceNumber();
+		short packetSrcAddr = dataPacket.getSrcAddr();
+		// Check if we've already received this packet. We ignored duplicate data, defined as
+		// any packet with a sequence number less than the value we're expecting from the host.
+		if(lastSeqNum >= packetSeqNum) {
+			Log.e(TAG, "Discarding a duplicate data packet from address " + packetSrcAddr +
+					", seq num " + packetSeqNum);
+		} else {
+			// Increment expected sequence number
+			short nextSeqNum = (short) (lastSeqNum + 1);
+			if(nextSeqNum > Packet.MAX_SEQ_NUM)
+				nextSeqNum = 0;
+			// Check if sender has retired a packet without this system ACKing
+			// and moved on. This will be indicated by a gap in sequence numbers.
+			// Log an error but queue anyway.
+			if(nextSeqNum < packetSeqNum) {
+				Log.e(TAG, "Gap in sequence numbers from host " + packetSrcAddr +
+						". Expecting " + nextSeqNum + ", got " + packetSeqNum);
+			}
+			
+			// Queue packet for delivery
+			try {
+				mRecvData.put(dataPacket);
+			} catch (InterruptedException e) {
+				Log.e(TAG, "Interrupted when blocking on the receive data queue");
+			}
+			
+			// Update last sequence number
+			mLastSeqs.put(packetSrcAddr, nextSeqNum);
+		}
+			
+		// TODO do we ACK duplicate data?
 		try {
 			// Prepare and queue ACK
-			Packet ack = new Packet(Packet.CTRL_ACK_CODE, dataPacket.getSrcAddr(), 
+			Packet ack = new Packet(Packet.CTRL_ACK_CODE, packetSrcAddr, 
 					mHostAddr, new byte[0], 0, dataPacket.getSequenceNumber());
 			mSendQueue.put(ack);
 		} catch (InterruptedException e) {
