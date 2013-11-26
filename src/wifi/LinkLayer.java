@@ -118,10 +118,14 @@ public class LinkLayer implements Dot11Interface {
 		}
 
 		Log.d(TAG,"Queueing "+len+" bytes to "+dest);
-		int queued = 0;
-		int code = Packet.CTRL_DATA_CODE;
+		// In reality, we should only get data packets from the layer above.
+		// To work with the GUI Bcast button though, we have to accept and
+		// handle broadcast packets from above as well.
+		int code = (dest == NSyncClock.BEACON_ADDR) ?
+				Packet.CTRL_BEACON_CODE : Packet.CTRL_DATA_CODE;
 		// We can only wrap Packet.MAX_DATA_BYTES per packet
 		// So loop until we've wrapped all the data in packets
+		int queued = 0;
 		while(queued < len) {
 			int toQueue = len - queued;
 			toQueue = (int)Math.min(toQueue, Packet.MAX_DATA_BYTES);
