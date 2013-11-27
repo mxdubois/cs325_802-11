@@ -42,8 +42,8 @@ public class RecvTask implements Runnable {
 		Log.i(TAG, "RecvThread running");
 		while(true) {
 			byte[] recvTrans = mRF.receive();
-			Log.i(TAG, "RecvThread got a transmission");
 			short packDest = Packet.parseDest(recvTrans);
+			Log.i(TAG, "RecvThread got a transmission for " + packDest);
 		   // Only consume beacons and data packets sent to this host
 			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) {
 				Packet packet = Packet.parse(recvTrans);

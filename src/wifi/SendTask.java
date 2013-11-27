@@ -109,10 +109,11 @@ public class SendTask implements Runnable {
 					setState(WAITING_PACKET_IFS);
 				} else {
 					try {
-						// Clamp to deal with a sleep illegal argument exception. This is a temporary fix
-						// http://stackoverflow.com/questions/4281668/java-thread-sleep-exception
-						int nanoWait = Utilities.longClamp(A_SLOT_TIME_NANO, 999999, 0);
-						Thread.sleep(0, nanoWait); // TODO sleep? for how long?
+						// TODO sleep? for how long?
+						int totalNanoWait = (int) (A_SLOT_TIME_NANO / 10);
+						int millisWait = (int) (totalNanoWait / NANO_SEC_PER_MS);
+						int nanoWait = (int) (totalNanoWait % NANO_SEC_PER_MS);
+						Thread.sleep(millisWait, nanoWait); 
 						
 					} catch(InterruptedException e) {
 						Log.e(TAG, e.getMessage());		
