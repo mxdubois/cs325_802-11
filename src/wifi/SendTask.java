@@ -220,7 +220,6 @@ public class SendTask implements Runnable {
 	
 	private void retirePacket() {
 		mPacket = null;
-//		mSequenceNumber++;
 	}
 	
 	private boolean receivedAckFor(Packet p) {
@@ -228,7 +227,6 @@ public class SendTask implements Runnable {
 		// synchronized block b/c otherwise other threads might screw us up
 		// we want to process the snapshot of the queue for this moment
 		synchronized(mRecvAckQueue) {
-
 			while(mRecvAckQueue.peek() != null) {
 				Packet ack = mRecvAckQueue.poll();
 				if(ack.getSequenceNumber() == p.getSequenceNumber() &&

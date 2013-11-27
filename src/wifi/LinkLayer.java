@@ -19,6 +19,7 @@ public class LinkLayer implements Dot11Interface {
 	public static int debugLevel = 1;
 
 	public static final int MAX_BYTE_VAL = 255;
+	public static final int MAX_MAC = 65535;
 
 	public static final int SUCCESS = 1;
 	public static final int UNSPECIFIED_ERROR = 2;
@@ -104,17 +105,18 @@ public class LinkLayer implements Dot11Interface {
 	 * of bytes to send.  See docs for full description.
 	 */
 	public int send(short dest, byte[] data, int len) {
+		// TODO figure out when BAD_ADDRESS should be set. With the 
+		// address specified as a short, and all short values valid
+		// addresses, I don't see how we'd ever get a bad address
 		if(len < 0) {
 			setStatus(BAD_BUF_SIZE);
 			return -1;
 		}
-		if(data == null) {
-			setStatus(BAD_ADDRESS);
-			return -1;
-		}
+		
 		// Protect ourselves against idiots
 		if(data.length < len) {
 			setStatus(ILLEGAL_ARGUMENT);
+			return -1;
 		}
 
 		Log.d(TAG,"Queueing "+len+" bytes to "+dest);

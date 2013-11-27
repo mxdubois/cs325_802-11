@@ -31,6 +31,7 @@ public class RecvTask implements Runnable {
 		mRecvAck = recvAck;
 		mHostAddr = hostAddr;
 		mSendQueue = sendQueue;
+		mLastSeqs = new HashMap<Short, Short>();
 		Log.i(TAG, TAG + " initialized");
 	}
 	
