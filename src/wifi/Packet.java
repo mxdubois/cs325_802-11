@@ -255,7 +255,7 @@ public class Packet implements Comparable<Packet>{
 		else {
 			newPacket = new Packet(packet);
 			// Check packet validity (CRC), return null if packet is not valid
-			//			if(!newPacket.checkPacketValidity()) newPacket = null;
+			if(!newPacket.checkPacketValidity()) newPacket = null;
 		}
 		return newPacket;
 	}
@@ -284,7 +284,7 @@ public class Packet implements Comparable<Packet>{
 	private boolean checkPacketValidity() {
 		boolean isValid = true;
 		// The received CRC
-		int recvCrc = mPacket.getInt(mPacketSize-CRC_SIZE-1);
+		int recvCrc = getCRC();
 		// Our calculated CRC
 		int calcCrc = computeAndSetCRC();
 		// Return false if these do not match up

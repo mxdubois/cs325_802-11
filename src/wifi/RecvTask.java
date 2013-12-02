@@ -47,13 +47,18 @@ public class RecvTask implements Runnable {
 		   // Only consume beacons and data packets sent to this host
 			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) {
 				Packet packet = Packet.parse(recvTrans);
-				int type = packet.getType();
-				if(type == Packet.CTRL_ACK_CODE) {
-					consumeAck(packet);
-				} else if(type == Packet.CTRL_BEACON_CODE) {
-					consumeBeacon(packet);
-				} else if(type == Packet.CTRL_DATA_CODE) {
-					consumeData(packet);
+				// Packet is null if not valid (CRC's didn't match)
+				if(packet == null)
+					Log.i(TAG, "Throwing out a corrupted packet");
+				else {
+					int type = packet.getType();
+					if(type == Packet.CTRL_ACK_CODE) {
+						consumeAck(packet);
+					} else if(type == Packet.CTRL_BEACON_CODE) {
+						consumeBeacon(packet);
+					} else if(type == Packet.CTRL_DATA_CODE) {
+						consumeData(packet);
+					}
 				}
 			}	
 		}
