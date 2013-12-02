@@ -2,10 +2,9 @@ package wifi;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.zip.CRC32;
 
 import rf.RF;
-
-import wifi.LinkLayer;
 
 /**
  * Represents an 802.11~ packet.
@@ -43,6 +42,7 @@ public class Packet implements Comparable<Packet>{
 	
 	private ByteBuffer mPacket;
 	private int mPacketSize; // Total packet length
+	private CRC32 mCRC; // Because we're lazy
 
 	// TODO CRC should be recomputed anytime a part of the packet is changed
 	// Perhaps we can flip a boolean at the end of the constructor to turn this
@@ -65,6 +65,7 @@ public class Packet implements Comparable<Packet>{
 		for(int i = 0; i < dataSize; i++)
 			mPacket.put(i + HEADER_SIZE, data[i]);
 
+		mCRC = new CRC32();
 		computeAndSetCRC();
 	}
 
@@ -111,18 +112,34 @@ public class Packet implements Comparable<Packet>{
 		
 		mPacket.put(0, highByte);
 		mPacket.put(1, lowByte);
+		
+		// Update the CRC
+		computeAndSetCRC();
 	}
 
 	public void setRetry(boolean isRetry) {
 		// Retry is 4th bit in first byte
 		byte firstByte = (byte) (isRetry ? mPacket.get(0) | 0x10 : mPacket.get(0) & 0xEF);
 		mPacket.put(0, firstByte);
+		
+		// Update the CRC
+		computeAndSetCRC();
 	}
 
+	/**
+	 * Computes and sets the new CRC
+	 * @return the new CRC
+	 */
 	private int computeAndSetCRC() {
-		// TODO: for now, return all 1's. Implement CRC if we actually have time
-		int crc = 0xFFFFFFFF;
-		mPacket.putInt(mPacketSize-CRC_SIZE, crc);
+		// Update the CRC
+		byte[] packetBytes = new byte[mPacketSize];
+		mPacket.get(packetBytes);
+		mCRC.update(packetBytes, 0, mPacketSize - CRC_SIZE);
+		
+		// Set the CRC
+		int crc = (int) mCRC.getValue();
+		mPacket.putInt(mPacketSize - CRC_SIZE, crc);
+
 		return crc;
 	}
 	
