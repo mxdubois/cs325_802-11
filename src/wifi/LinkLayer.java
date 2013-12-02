@@ -1,6 +1,7 @@
 package wifi;
 import java.io.PrintWriter;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -32,8 +33,10 @@ public class LinkLayer implements Dot11Interface {
 	public static final int ILLEGAL_ARGUMENT = 9;
 	public static final int INSUFFICIENT_BUFFER_SPACE = 10;
 
-	public static final int RECV_DATA_BUFFER_SIZE = 300;
-	public static final int RECV_ACK_BUFFER_SIZE = 100;
+	public static final int RECV_DATA_BUFFER_SIZE = 4;
+	public static final int RECV_ACK_BUFFER_SIZE = 4;
+	
+	private static final int MAX_OUT_DATA_PACKETS = 4;
 
 
 	private RF theRF;           // You'll need one of these eventually
@@ -117,6 +120,23 @@ public class LinkLayer implements Dot11Interface {
 		if(data.length < len) {
 			setStatus(ILLEGAL_ARGUMENT);
 			return -1;
+		}
+		
+		// Don't queue more than MAX_OUT_DATA_PACKETS
+		// TODO: should we keep a count instead of searching?
+		// Or separate queues for ack/beacon and data?
+		int dataPacketCount = 0;
+		synchronized(mSendQueue) {
+			Iterator<Packet> iter = mSendQueue.iterator();
+			while(iter.hasNext()) {
+				if(iter.next().getType() == Packet.CTRL_DATA_CODE)
+					dataPacketCount++;
+				if(dataPacketCount == MAX_OUT_DATA_PACKETS) {
+					Log.e(TAG, MAX_OUT_DATA_PACKETS + 
+							" data packets already queued. Ignoring a new packet");
+					return 0;
+				}					
+			}
 		}
 
 		Log.d(TAG,"Queueing "+len+" bytes to "+dest);

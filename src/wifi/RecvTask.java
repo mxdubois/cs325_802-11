@@ -81,15 +81,11 @@ public class RecvTask implements Runnable {
 	 */
 	private void consumeData(Packet dataPacket) {
 		Log.i(TAG, "Consuming DATA packet");
-		try {
-			synchronized(mRecvData) {
-				// If queue is full, remove oldest element. This class is the only producer,
-				// so we don't have to synchronize mRecvData during the rest of this method
-				if(mRecvData.remainingCapacity() == 0)
-					mRecvData.take();
-			}
-		} catch(InterruptedException ex) {
-			Log.e(TAG, "RecvTask interrupted when blocking on the receive data queue");
+		
+		// If buffer is full, ignore new packets
+		if(mRecvData.remainingCapacity() == 0) {
+			Log.e(TAG, "Incoming data packet queue is full, ignoring a new data packet");
+			return;
 		}
 		
 		Short lastSeqNum = mLastSeqs.get(dataPacket.getSrcAddr());
@@ -98,7 +94,7 @@ public class RecvTask implements Runnable {
 		
 		short packetSeqNum = dataPacket.getSequenceNumber();
 		short packetSrcAddr = dataPacket.getSrcAddr();
-		// Check if we've already received this packet. We ignored duplicate data, defined as
+		// Check if we've already received this packet. We ignore duplicate data, defined as
 		// any packet with a sequence number less than the value we're expecting from the host.
 		if(lastSeqNum >= packetSeqNum) {
 			Log.e(TAG, "Discarding a duplicate data packet from address " + packetSrcAddr +
@@ -131,7 +127,7 @@ public class RecvTask implements Runnable {
 		try {
 			// Prepare and queue ACK
 			Packet ack = new Packet(Packet.CTRL_ACK_CODE, packetSrcAddr, 
-					mHostAddr, new byte[0], 0, dataPacket.getSequenceNumber());
+					mHostAddr, new byte[0], 0, packetSeqNum);
 			mSendQueue.put(ack);
 		} catch (InterruptedException e) {
 			Log.e(TAG, "RecvTask interrupted when blocking on the send queue");
