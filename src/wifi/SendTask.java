@@ -31,7 +31,8 @@ public class SendTask implements Runnable {
 	private Packet mPacket;
 	private int mState = INITIALIZED;
 	private int mSlotSelectionPolicy;
-	private HashMap<Short, Short> mLastSeqs; // Maps dest addrs to last sequence nums
+	// Map of last seq nums by dest address
+	private HashMap<Short, Short> mLastSeqs; 
 	private long mLastEvent;
 	private long mLastBeaconEvent;
 	
@@ -43,9 +44,10 @@ public class SendTask implements Runnable {
 	
 	// INTERVALS
 	private static final long NANO_SEC_PER_MS = NSyncClock.NANO_SEC_PER_MS;
-	private long mAckWaitNanoSec = 20L * NANO_SEC_PER_MS;
-	private long mBeaconInterval = -1; //1000L * NANO_SEC_PER_MS;
-	private long mBackoff = 0L;
+	private long mAckWaitNano = 20L * NANO_SEC_PER_MS;
+	private long mBeaconIntervalNano = -1; //1000L * NANO_SEC_PER_MS;
+	private long mBackoffNano = 0L;
+	
 	// Contention window
 	private static final long CW_MIN = RF.aCWmin; //TODO proper value
 	private static final long CW_MAX = RF.aCWmax; // TODO proper value
@@ -64,7 +66,7 @@ public class SendTask implements Runnable {
 		mRecvAckQueue = recvAckQueue;
 		mClock = nSyncClock;
 		mHostStatus = hostStatus;
-		mAckWaitNanoSec = mClock.nanoAckWaitEst();
+		mAckWaitNano = mClock.nanoAckWaitEst();
 		mLastSeqs = new HashMap<Short,Short>();
 		Log.d(TAG, TAG + " initialized!");
 		setState(WAITING_FOR_DATA);
@@ -72,7 +74,8 @@ public class SendTask implements Runnable {
 	
 	@Override
 	public void run() {
-		while(!Thread.interrupted()) { 
+		boolean done = false;
+		while(!Thread.interrupted() && !done) {
 			
 			switch(mState) {
 			
@@ -80,19 +83,25 @@ public class SendTask implements Runnable {
 				try {
 					mPacket = null;
 					
-					long beaconElapsed = System.nanoTime() - mLastBeaconEvent;
-					if(mBeaconInterval > -1 && beaconElapsed >= mBeaconInterval) {
-						// we need to send a beacon
+					long beaconElapsed = mClock.nanoTime() - mLastBeaconEvent;
+					boolean isBaconTime = beaconElapsed >= mBeaconIntervalNano;
+					// if it's time for bacon
+					if(mBeaconIntervalNano > -1 && isBaconTime) {
 						mPacket = mClock.generateBeacon();
-						mLastBeaconEvent = System.nanoTime();
+						mLastBeaconEvent = mClock.nanoTime();
 					} else {
-						mPacket = mSendQueue.poll(mBeaconInterval, 
+						// otherwise block on poll for beaconInterval
+						mPacket = mSendQueue.poll(mBeaconIntervalNano, 
 												TimeUnit.NANOSECONDS);
 					}
+					
+					// If we got a packet either way
 					if(mPacket != null) {
+						// Only set seq number for data
 						// ACK sequence numbers are already set by the RecvTask
 						if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
-							Short nextSeq = getNextSeqNum(mPacket.getDestAddr());
+							Short nextSeq = 
+									getNextSeqNum(mPacket.getDestAddr());
 							mPacket.setSequenceNumber(nextSeq);
 						}
 						mTryCount = 0;
@@ -100,6 +109,7 @@ public class SendTask implements Runnable {
 						setState(WAITING_FOR_OPEN_CHANNEL);
 					}
 				} catch (InterruptedException e) {
+					done = true;
 					Log.e(TAG, e.getMessage());
 				}
 				break;
@@ -109,13 +119,9 @@ public class SendTask implements Runnable {
 					setState(WAITING_PACKET_IFS);
 				} else {
 					try {
-						// TODO sleep? for how long?
-						int totalNanoWait = (int) (A_SLOT_TIME_NANO / 10);
-						int millisWait = (int) (totalNanoWait / NANO_SEC_PER_MS);
-						int nanoWait = (int) (totalNanoWait % NANO_SEC_PER_MS);
-						Thread.sleep(millisWait, nanoWait); 
-						
+						sleepyTime();
 					} catch(InterruptedException e) {
+						done = true;
 						Log.e(TAG, e.getMessage());		
 					}
 				}
@@ -126,23 +132,29 @@ public class SendTask implements Runnable {
 				if(mRF.inUse()) {
 					setState(WAITING_FOR_OPEN_CHANNEL);
 					//TODO use mRf.getIdleTime() ?
-				} else if(System.nanoTime() - mLastEvent >= waitFor) {
+				} else if(mClock.nanoTime() - mLastEvent >= waitFor) {
 					setState(WAITING_BACKOFF);
 				} else {
-					// TODO sleep? for how long?
+					try {
+						sleepyTime();
+					} catch(InterruptedException e) {
+						done = true;
+						Log.e(TAG, e.getMessage());		
+					}
 				}
 				break;
 				
 			case WAITING_BACKOFF:
-				long elapsed = System.nanoTime() - mLastEvent;
+				long elapsed = mClock.nanoTime() - mLastEvent;
 				if(mRF.inUse()) {
-					mBackoff = mBackoff - elapsed;
+					mBackoffNano = mBackoffNano - elapsed;
 					setState(WAITING_FOR_OPEN_CHANNEL);
-				} else if(elapsed >= mBackoff) {
+				} else if(elapsed >= mBackoffNano) {
 					if(mPacket.isBeacon()) {
 						// update time to the latest
 						mClock.updateBeacon(mPacket);
 					}
+					// TODO in theory some jerkface could jump on the channel while we're updating the beacon
 					// TODO handle problems with transmit
 					int status = transmit(mPacket);
 					mTryCount++;
@@ -155,35 +167,49 @@ public class SendTask implements Runnable {
 						setState(WAITING_FOR_DATA);
 					}
 				} else {
-					// Sleep how long?
+					try {
+						sleepyTime();
+					} catch(InterruptedException e) {
+						done = true;
+						Log.e(TAG, e.getMessage());		
+					}
 				}
 				break;
 				
 			case WAITING_FOR_ACK:
+				// If we're done with this packet
 				if(mTryCount >= MAX_TRY_COUNT || receivedAckFor(mPacket)) {
 					if(mTryCount >= MAX_TRY_COUNT) {
-						// we give up
-						Log.d(TAG, "Giving up on packet " + mPacket.getSequenceNumber());
+						// we're done because we give up
+						Log.d(TAG, "Giving up on packet " + 
+								mPacket.getSequenceNumber());
 
 						mHostStatus.set(LinkLayer.TX_FAILED);
 					} else {
-						// success!!
-						Log.d(TAG, "Sender received packet" + mPacket.getSequenceNumber());
-
+						// we're done because we succeeded!!!
+						Log.d(TAG, "Sender received packet" + 
+								mPacket.getSequenceNumber());
 						mHostStatus.set(LinkLayer.TX_DELIVERED);
 						NSyncClock.dance();
 					}
+					
 					// Moving on
 					retirePacket();
 					setState(WAITING_FOR_DATA);
-				} else if(System.nanoTime() - mLastEvent >= mAckWaitNanoSec) {
+				} else if(mClock.nanoTime() - mLastEvent >= mAckWaitNano) {
 					// No ack, resend.
 					Log.d(TAG, "No ACK received. Collision has occured.");
 					mPacket.setRetry(true);
 					setBackoff(mTryCount, mPacket.getType());
 					setState(WAITING_FOR_OPEN_CHANNEL);
 				} else {
-					// TODO sleep? for how long?
+					// there's nothing to do yet, sleepytime
+					try {
+						sleepyTime();
+					} catch(InterruptedException e) {
+						done = true;
+						Log.e(TAG, e.getMessage());		
+					}
 				}
 				break;
 				
@@ -192,11 +218,10 @@ public class SendTask implements Runnable {
 		} // End while
 		
 		Log.e(TAG, "Interrupted!");
-		// TODO cleanup? Idk.. this is Java, prolly doesn't matter.
 	}
 	
 	private void setState(int newState) {
-		mLastEvent = System.nanoTime();
+		mLastEvent = mClock.nanoTime();
 		mState = newState;
 		switch(newState) {
 		case WAITING_FOR_DATA :
@@ -213,7 +238,7 @@ public class SendTask implements Runnable {
 //			Log.d(TAG, "Waiting backoff: " + mBackoff);
 			break;
 		case WAITING_FOR_ACK:
-			double ms = mAckWaitNanoSec / NANO_SEC_PER_MS;
+//			double ms = mAckWaitNanoSec / NANO_SEC_PER_MS;
 //			Log.d(TAG, "Waiting " + ms + "ms for ACK.");
 			break;
 		}
@@ -249,7 +274,7 @@ public class SendTask implements Runnable {
 		if(tryCount < 0) 
 			throw new IllegalStateException(TAG + ": tryCount cannot be < 0");
 		if(pType == Packet.CTRL_BEACON_CODE) {
-			mBackoff = 0L;
+			mBackoffNano = 0L;
 		} else {
 			// Reset mCW if tries == 0
 			// else double mCW and add one after every retry
@@ -258,29 +283,30 @@ public class SendTask implements Runnable {
 			// but clamp it to our specified range
 			mCW = Math.max(CW_MIN, Math.min(newCW, CW_MAX));
 			// Get a random backoff in the range [0,mCW]
-			mBackoff = Utilities.nextLong(mCW + 1L) * A_SLOT_TIME_NANO;
+			mBackoffNano = Utilities.nextLong(mCW + 1L) * A_SLOT_TIME_NANO;
 			
 			// If slot selection override
 			if(mSlotSelectionPolicy != 0) {
 				// Instead, take mCW as backoff
-				mBackoff = mCW * A_SLOT_TIME_NANO;
+				mBackoffNano = mCW * A_SLOT_TIME_NANO;
 			}
 		}
 	}
 	
 	private int transmit(Packet p) {
-		Log.i(TAG, "Transmitting the following packet, try " + mTryCount + "\n    " + p.toString());
+		Log.i(TAG, "Transmitting the following packet, try " + 
+				mTryCount + "\n    " + p.toString());
 		return mRF.transmit(p.getBytes());
 	}
 	
 	
 	// PACKAGE PRIVATE / PROTECTED STUFF
 	protected void setBeaconInterval(long interval) {
-		mBeaconInterval = interval;
+		mBeaconIntervalNano = interval;
 	}
 	
 	protected long getBeaconInterval() {
-		return mBeaconInterval;
+		return mBeaconIntervalNano;
 	}
 	
 	/**
@@ -293,6 +319,27 @@ public class SendTask implements Runnable {
 	
 	protected int getSlotSelectionPolicy() {
 		return mSlotSelectionPolicy;
+	}
+	
+	/**
+	 * Sleeps for the default time
+	 * @throws InterruptedException if thread is interrupted.
+	 */
+	protected void sleepyTime() throws InterruptedException {
+		int totalNanoWait = (int) (A_SLOT_TIME_NANO / 10);
+		sleepyTime(totalNanoWait);
+	}
+	
+	/**
+	 * Sleeps for the specified time
+	 * @param ms
+	 * @throws InterruptedException if thread is interrupted.
+	 */
+	protected void sleepyTime(long nano) throws InterruptedException {
+		int millisWait = (int) (nano / NANO_SEC_PER_MS);
+        int nanoWait = (int) (nano % NANO_SEC_PER_MS);
+		Log.d(TAG, "sleepyTime! " + nano + "ms");
+		Thread.sleep(millisWait, nanoWait);
 	}
 	
 	/**

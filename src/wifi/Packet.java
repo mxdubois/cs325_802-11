@@ -42,11 +42,8 @@ public class Packet implements Comparable<Packet>{
 	
 	private ByteBuffer mPacket;
 	private int mPacketSize; // Total packet length
-	private CRC32 mCRC; // Because we're lazy
 
-	// TODO CRC should be recomputed anytime a part of the packet is changed
-	// Perhaps we can flip a boolean at the end of the constructor to turn this
-	// behavior on.. it only needs to happen after the packet is constructed.
+	private boolean mPacketInitialized;
 	
 	public Packet(int type, short dest, short src, byte[] data, int len) {
 		this(type, dest, src, data, len, (short) 0);
@@ -65,7 +62,7 @@ public class Packet implements Comparable<Packet>{
 		for(int i = 0; i < dataSize; i++)
 			mPacket.put(i + HEADER_SIZE, data[i]);
 
-		mCRC = new CRC32();
+		mPacketInitialized = true;
 		computeAndSetCRC();
 	}
 
@@ -77,7 +74,9 @@ public class Packet implements Comparable<Packet>{
 	 */
 	private Packet(byte[] packet) {
 		mPacketSize = packet.length;
+		//mPacket = ByteBuffer.allocate(mPacketSize).order(ByteOrder.BIG_ENDIAN);
 		mPacket = ByteBuffer.wrap(packet).order(ByteOrder.BIG_ENDIAN);
+		mPacketInitialized = true;
 	}
 
 	private void buildHeader(int type, short dest, short src, short seqNum) {
@@ -128,19 +127,12 @@ public class Packet implements Comparable<Packet>{
 
 	/**
 	 * Computes and sets the new CRC
-	 * @return the new CRC
 	 */
-	private int computeAndSetCRC() {
-		// Update the CRC
-		byte[] packetBytes = new byte[mPacketSize];
-		mPacket.get(packetBytes);
-		mCRC.update(packetBytes, 0, mPacketSize - CRC_SIZE);
-		
-		// Set the CRC
-		int crc = (int) mCRC.getValue();
-		mPacket.putInt(mPacketSize - CRC_SIZE, crc);
-
-		return crc;
+	private void computeAndSetCRC() {
+		// Only recompute CRC if packet has been fully initialized,
+		if(mPacketInitialized) {
+			mPacket.putInt(mPacketSize - CRC_SIZE, computeCRC(this));
+		}
 	}
 	
 	public byte[] getBytes() {
@@ -242,6 +234,21 @@ public class Packet implements Comparable<Packet>{
 		}
 		return str;
 	}
+	
+	/**
+	 * Computes and returns the given packet's CRC based on all bytes except CRC
+	 * @param p - Packet
+	 * @return int CRC of packet
+	 */
+	public static int computeCRC(Packet p) {
+		// As it turns out, we need to create a new CRC32 object each time
+		// we compute a crc, the update method does something screwy
+		// TODO figure out how to use update method correctly
+		CRC32 crc = new CRC32();
+		byte[] packetBytes = p.getBytes();
+		crc.update(packetBytes, 0, packetBytes.length - CRC_SIZE);
+		return (int) crc.getValue();
+	}
 
 	/**
 	 * Parses a byte array into a packet
@@ -284,12 +291,23 @@ public class Packet implements Comparable<Packet>{
 	private boolean checkPacketValidity() {
 		boolean isValid = true;
 		// The received CRC
-		int recvCrc = getCRC();
+		int recvCRC = getCRC();
 		// Our calculated CRC
-		int calcCrc = computeAndSetCRC();
+		int calcCRC = computeCRC(this);
 		// Return false if these do not match up
-		if(calcCrc != recvCrc) isValid = false;
+		if(calcCRC != recvCRC) isValid = false;
 
+		if(!isValid) {
+			Log.d(TAG, "Invalid packet.");
+			Log.d(TAG, "Packet CRC:" + recvCRC);
+			Log.d(TAG, "Computed CRC:" + calcCRC);
+			byte[] array = getBytes();
+			String str = "";
+			for(int i=0; i<array.length - CRC_SIZE; i++) {
+				str += (char) array[i];
+			}
+			Log.d(TAG, str);
+		}
 		return isValid;
 	}
 	

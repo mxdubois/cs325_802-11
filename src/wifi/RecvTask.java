@@ -49,7 +49,7 @@ public class RecvTask implements Runnable {
 				Packet packet = Packet.parse(recvTrans);
 				// Packet is null if not valid (CRC's didn't match)
 				if(packet == null)
-					Log.i(TAG, "Throwing out a corrupted packet");
+					Log.i(TAG, "Throwing out a corrupted packet. \n ");
 				else {
 					int type = packet.getType();
 					if(type == Packet.CTRL_ACK_CODE) {
