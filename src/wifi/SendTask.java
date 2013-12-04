@@ -186,7 +186,7 @@ public class SendTask implements Runnable {
 
 						mHostStatus.set(LinkLayer.TX_FAILED);
 					} else {
-						// we're done because we succeeded!!!
+						// success! we're done because we succeeded!!!
 						Log.d(TAG, "Sender received packet" + 
 								mPacket.getSequenceNumber());
 						mHostStatus.set(LinkLayer.TX_DELIVERED);
