@@ -178,10 +178,6 @@ public class LinkLayer implements Dot11Interface {
 				return 0;
 			}
 		}
-		
-		// If there are no packets to deliver
-		if(mLastRecvData == null)
-			return 0;
 
 		// Put addresses in Transmission object
 		t.setDestAddr(mLastRecvData.getDestAddr());
