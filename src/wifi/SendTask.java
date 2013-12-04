@@ -43,7 +43,7 @@ public class SendTask implements Runnable {
 	private int mTryCount = 0;
 	
 	// INTERVALS
-	private static final long NANO_SEC_PER_MS = NSyncClock.NANO_SEC_PER_MS;
+	private static final long NANO_SEC_PER_MS = NSyncClock.NANO_PER_MILLIS;
 	private long mAckWaitNano = 20L * NANO_SEC_PER_MS;
 	private long mBeaconIntervalNano = -1; //1000L * NANO_SEC_PER_MS;
 	private long mBackoffNano = 0L;

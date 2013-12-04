@@ -1,5 +1,6 @@
 package wifi;
 
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.zip.CRC32;
@@ -17,7 +18,7 @@ public class Packet implements Comparable<Packet>{
 	private static final String TAG = "Packet";
 	
 	// TODO wtf are correct values for these?
-	public static final long SIFS = RF.aSIFSTime * NSyncClock.NANO_SEC_PER_MS;
+	public static final long SIFS = RF.aSIFSTime * NSyncClock.NANO_PER_MILLIS;
 	public static final long PIFS = 2*SIFS;
 	public static final long DIFS = 4*SIFS;
 	public static final long EIFS = 8*SIFS;
@@ -111,6 +112,26 @@ public class Packet implements Comparable<Packet>{
 		
 		mPacket.put(0, highByte);
 		mPacket.put(1, lowByte);
+		
+		// Update the CRC
+		computeAndSetCRC();
+	}
+	
+	public void setData(byte[] data) {
+		int size = HEADER_SIZE + data.length + CRC_SIZE;
+		if(size != mPacketSize) {
+			// resize buffer only if we need to
+			ByteBuffer newBuffer = ByteBuffer
+									.allocate(size)
+									.order(ByteOrder.BIG_ENDIAN);
+			byte[] header = new byte[HEADER_SIZE];
+			mPacket.position(0);
+			mPacket.get(header);
+			newBuffer.put(header);
+			mPacket = newBuffer;
+		}
+		mPacket.position(HEADER_SIZE);
+		mPacket.put(data);
 		
 		// Update the CRC
 		computeAndSetCRC();

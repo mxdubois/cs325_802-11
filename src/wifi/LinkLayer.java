@@ -84,7 +84,7 @@ public class LinkLayer implements Dot11Interface {
 		mRecvAck = new ArrayBlockingQueue<Packet>(RECV_ACK_BUFFER_SIZE);
 		mSendQueue = new PriorityBlockingQueue<Packet>();
 
-		mClock = new NSyncClock();
+		mClock = new NSyncClock(ourMAC);
 
 		mRecvTask = new RecvTask(theRF, mClock, mSendQueue, mRecvAck, mRecvData, ourMAC);
 		mRecvThread = new Thread(mRecvTask);
