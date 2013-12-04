@@ -338,7 +338,7 @@ public class SendTask implements Runnable {
 	protected void sleepyTime(long nano) throws InterruptedException {
 		int millisWait = (int) (nano / NANO_SEC_PER_MS);
         int nanoWait = (int) (nano % NANO_SEC_PER_MS);
-		Log.d(TAG, "sleepyTime! " + nano + "ms");
+		//Log.d(TAG, "sleepyTime! " + nano + "ms");
 		Thread.sleep(millisWait, nanoWait);
 	}
 	
