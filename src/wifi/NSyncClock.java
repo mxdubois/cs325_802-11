@@ -5,15 +5,20 @@ public class NSyncClock {
 	private static final boolean DEBUG = LinkLayer.debugLevel > 0;
 	private static final String TAG = "NSyncClock";
 	public final static short BEACON_ADDR = (short) 0xFFFF;
-	private long mOffset = 0L; // offset in nanoseconds
+	private long mOffsetNano = 0L; // offset in nanoseconds
 	
 	public static final long NANO_SEC_PER_MS = 1000000L;
+	
 	public NSyncClock() {
 		
 	}
 	
+	public long nanoTime() {
+		return mOffsetNano + System.nanoTime();
+	}
+	
 	public long getOffset() {
-		return mOffset;
+		return mOffsetNano;
 	}
 	
 	public Packet generateBeacon() {
@@ -21,7 +26,7 @@ public class NSyncClock {
 				(short)0, 
 				(short)0, 
 				new byte[10],
-				1);
+				10);
 	}
 	
 	/**
@@ -40,7 +45,7 @@ public class NSyncClock {
 	
 	public long nanoAckWaitEst() {
 		// TODO implement meeeeee!
-		return 20L * NANO_SEC_PER_MS;
+		return 20L;
 	}
 	
 	// REALLY REALLY IMPORTANT METHODS
