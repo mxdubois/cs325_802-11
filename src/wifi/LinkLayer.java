@@ -228,7 +228,7 @@ public int command(int cmd, int val) {
 				"1. debugLevel: " + debugLevel + "\n" +
 				"2. slotSelectionPolicy: " 
 				+ mSendTask.getSlotSelectionPolicy() + "\n" +
-				"3. beaconInterval: " + mSendTask.getBeaconInterval() + "\n");
+				"3. beaconInterval: " + mClock.getBeaconInterval() + "\n");
 		break;
 	case 1: // Debug Level
 		debugLevel = val;
@@ -237,7 +237,7 @@ public int command(int cmd, int val) {
 		mSendTask.setSlotSelectionPolicy(val);
 		break;
 	case 3: // Beacon Interval
-		mSendTask.setBeaconInterval(val);
+		mClock.setBeaconInterval(val);
 		break;		
 	}
 	return 0;

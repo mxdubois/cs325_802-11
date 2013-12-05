@@ -1,20 +1,56 @@
 package wifi;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicLong;
+
+import rf.RF;
 
 public class NSyncClock {
 	
 	private static final boolean DEBUG = LinkLayer.debugLevel > 0;
 	private static final String TAG = "NSyncClock";
-	public final static short BEACON_ADDR = (short) 0xFFFF;
-	private long mOffsetNano = 0L; // offset in nanoseconds
-	private final short mOurMAC;
+	
+	public static final short BEACON_ADDR = (short) 0xFFFF;
 	
 	public static final long NANO_PER_MILLIS = 1000000L;
 	public static final long NANO_PER_MICRO = 1000L;
 	
+	public static final long NANO_PER_CLOCK_UNIT = NANO_PER_MILLIS;
+	public static final long CLOCK_UNIT_PER_MILLIS = 1;
+	
+	public static final long A_SLOT_TIME = RF.aSlotTime * CLOCK_UNIT_PER_MILLIS;
+	public static final long CW_MIN = RF.aCWmin * CLOCK_UNIT_PER_MILLIS;
+	public static final long CW_MAX = RF.aCWmax * CLOCK_UNIT_PER_MILLIS;
+	
+	/**
+	 * Returns the slot length in nano seconds
+	 * @return
+	 */
+	public static long getSlotTimeNano() {
+		return A_SLOT_TIME * NANO_PER_CLOCK_UNIT;
+	}
+	
+	//-------------------------------------------------------------------------
+	// INSTANCE STUFF
+	//-------------------------------------------------------------------------
+	
+	private final short mOurMAC;
+	// Just in case another thread tries to play with these
+	private AtomicLong mBeaconInterval;
+	private AtomicLong mOffsetNano; // offset in nanoseconds
+	
 	public NSyncClock(short macDonalds) {
 		mOurMAC = macDonalds;
+		mBeaconInterval = new AtomicLong(-1L);
+		mOffsetNano.set(0L);
+	}
+	
+	/**
+	 * Returns the time we should be using to compute elapsed time
+	 * @return
+	 */
+	public long time() {
+		return nanoTime();
 	}
 	
 	/**
@@ -22,7 +58,7 @@ public class NSyncClock {
 	 * @return
 	 */
 	public long nanoTime() {
-		return mOffsetNano + System.nanoTime();
+		return mOffsetNano.get() + System.nanoTime();
 	}
 	
 	/**
@@ -33,8 +69,16 @@ public class NSyncClock {
 		return nanoTime() / NANO_PER_MILLIS;
 	}
 	
-	public long getNanoOffset() {
-		return mOffsetNano;
+	public long getBeaconInterval() {
+		return mBeaconInterval.get();
+	}
+	
+	public long getBeaconIntervalNano() {
+		return mBeaconInterval.get() * NANO_PER_CLOCK_UNIT;
+	}
+	
+	public void setBeaconInterval(long clockUnits) {
+		mBeaconInterval.set(clockUnits);
 	}
 	
 	public Packet generateBeacon() {
@@ -66,28 +110,29 @@ public class NSyncClock {
 	}
 	
 	public void consumeBacon(Packet p) {
-		long ourNanoTime = nanoTime(); // capture as soon as possible
-		if(p.isBeacon()) {
-			byte[] data = p.getData();
-			long time = ByteBuffer.wrap(data).getLong();
-			// TODO is this time in microseconds? milliseconds? nanoseconds?
-			// TODO add estimated transfer time
-			long nanoTime = time * NANO_PER_MILLIS;
-			long nanoOffset = nanoTime - ourNanoTime;
-			// If their time is ahead of ours, roll ours forward to match
-			if( nanoOffset > 0) {
-				mOffsetNano += nanoOffset; 
+		synchronized(mOffsetNano) {
+			long ourTime = time(); // capture as soon as possible
+			if(p.isBeacon()) {
+				byte[] data = p.getData();
+				long time = ByteBuffer.wrap(data).getLong();
+				// TODO add estimated transfer time
+				long difference = time - ourTime;
+				// If their time is ahead of ours, roll ours forward to match
+				if( difference > 0) {
+					mOffsetNano.set(mOffsetNano.get() + difference); 
+				}
 			}
 		}
 	}
 	
-	public long nanoAckWaitEst() {
+	public long ackWaitEst() {
 		// TODO implement meeeeee!
 		return 20L;
 	}
 	
+	//--------------------------------------------------------------------------
 	// REALLY REALLY IMPORTANT METHODS
-	// ------------------------
+	//--------------------------------------------------------------------------
 	
 	public static void dance() {
 		int randInt = Utilities.random.nextInt(3);
