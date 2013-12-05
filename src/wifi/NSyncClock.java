@@ -42,7 +42,7 @@ public class NSyncClock {
 	public NSyncClock(short macDonalds) {
 		mOurMAC = macDonalds;
 		mBeaconInterval = new AtomicLong(-1L);
-		mOffsetNano.set(0L);
+		mOffsetNano = new AtomicLong(0L);
 	}
 	
 	/**
