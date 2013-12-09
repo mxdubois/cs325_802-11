@@ -195,7 +195,7 @@ public class SendTask implements Runnable {
 						mHostStatus.set(LinkLayer.TX_DELIVERED);
 						NSyncClock.dance();
 						
-						// Check if the RTT test is done
+						// If in RTT mode, check if the RTT test is done
 						if(LinkLayer.layerMode == LinkLayer.MODE_ROUND_TRIP_TEST &&
 								mPacket.getSequenceNumber() == 
 								RoundTripTimeTest.NUM_RTT_PACKETS - 1)

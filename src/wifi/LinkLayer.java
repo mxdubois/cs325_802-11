@@ -44,8 +44,8 @@ public class LinkLayer implements Dot11Interface {
 	private static final int MAX_OUT_DATA_PACKETS = 4;
 
 
-	private RF theRF;           // You'll need one of these eventually
-	private short ourMAC; // Our MAC address
+	private RF mRF;   // The physical layer
+	private short mMac; // Our MAC address
 
 	private BlockingQueue<Packet> mRecvData;
 	private BlockingQueue<Packet> mRecvAck;
@@ -88,14 +88,14 @@ public class LinkLayer implements Dot11Interface {
 	public LinkLayer(short ourMAC, PrintWriter output, int mode) {
 
 		if(output != null)
-			Log.setStream(output); // Write to the GUI
+			Log.setStream(output); // Write to the GUI if specified
 
 		layerMode = mode;
 
 		mStatus = new AtomicInteger();
-		this.ourMAC = ourMAC;
+		this.mMac = ourMAC;
 		// TODO check if RF init failed?
-		theRF = new RF(null, null);
+		mRF = new RF(null, null);
 
 		mRecvData = new ArrayBlockingQueue<Packet>(RECV_DATA_BUFFER_SIZE);
 		mRecvAck = new ArrayBlockingQueue<Packet>(RECV_ACK_BUFFER_SIZE);
@@ -103,12 +103,12 @@ public class LinkLayer implements Dot11Interface {
 
 		mClock = new NSyncClock(ourMAC);
 
-		mRecvTask = new RecvTask(theRF, mClock, mSendQueue, 
+		mRecvTask = new RecvTask(mRF, mClock, mSendQueue, 
 				mRecvAck, mRecvData, ourMAC);
 		mRecvThread = new Thread(mRecvTask);
 		mRecvThread.start();
 
-		mSendTask = new SendTask(theRF, mClock, mStatus, 
+		mSendTask = new SendTask(mRF, mClock, mStatus, 
 				mSendQueue, mRecvAck);
 		mSendThread = new Thread(mSendTask);
 		mSendThread.start();
@@ -116,11 +116,9 @@ public class LinkLayer implements Dot11Interface {
 		mLastRecvDataOffset = 0;
 		mLastRecvData = null;
 
-
+		// Queue packets if we're in RTT test mode
 		if(layerMode == MODE_ROUND_TRIP_TEST)
 			queueRTTPackets();
-
-		Log.d(TAG, "Constructor ran.");
 	}
 
 	// TODO do we need an init method?
@@ -179,7 +177,7 @@ public class LinkLayer implements Dot11Interface {
 			toQueue = (int)Math.min(toQueue, Packet.MAX_DATA_BYTES);
 			byte[] sendData  = new byte[toQueue];
 			System.arraycopy(data, queued, sendData, 0, toQueue);
-			Packet packet = new Packet(code, dest, ourMAC, sendData, len);
+			Packet packet = new Packet(code, dest, mMac, sendData, len);
 			// Queue it for sending
 			mSendQueue.offer(packet);
 			queued = queued + toQueue;
@@ -315,7 +313,7 @@ public class LinkLayer implements Dot11Interface {
 	private void queueRTTPackets() {
 		for(int i = 0; i < RoundTripTimeTest.NUM_RTT_PACKETS; i++) {
 			Packet dataPacket = new Packet(Packet.CTRL_DATA_CODE, 
-					RoundTripTimeTest.RTT_TEST_DEST_MAC, ourMAC, 
+					RoundTripTimeTest.RTT_TEST_DEST_MAC, mMac, 
 					new byte[] {(byte)i}, 1);
 			
 			// Wait until there's room in the queue. Sleeping on this thread
