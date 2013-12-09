@@ -106,7 +106,7 @@ public class LinkLayer implements Dot11Interface {
 		mRecvAck = new ArrayBlockingQueue<Packet>(RECV_ACK_BUFFER_SIZE);
 		mSendQueue = new PriorityBlockingQueue<Packet>();
 
-		mClock = new NSyncClock();
+		mClock = new NSyncClock(ourMAC);
 
 		mRecvTask = new RecvTask(theRF, mClock, mSendQueue, 
 				mRecvAck, mRecvData, ourMAC);
@@ -242,7 +242,7 @@ public class LinkLayer implements Dot11Interface {
 	public int status() {
 		return mStatus.get();
 	}
-
+	
 	/**
 	 * Passes command info to your link layer.  See docs for full description.
 	 */
@@ -255,7 +255,7 @@ public class LinkLayer implements Dot11Interface {
 					"1. debugLevel: " + debugLevel + "\n" +
 					"2. slotSelectionPolicy: " 
 					+ mSendTask.getSlotSelectionPolicy() + "\n" +
-					"3. beaconInterval: " + mSendTask.getBeaconInterval() + "\n");
+					"3. beaconInterval: " + mClock.getBeaconInterval() + "\n");
 			break;
 		case 1: // Debug Level
 			debugLevel = val;
@@ -264,7 +264,7 @@ public class LinkLayer implements Dot11Interface {
 			mSendTask.setSlotSelectionPolicy(val);
 			break;
 		case 3: // Beacon Interval
-			mSendTask.setBeaconInterval(val);
+			mClock.setBeaconInterval(val);
 			break;		
 		}
 		return 0;
