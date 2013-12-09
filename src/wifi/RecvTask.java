@@ -68,6 +68,7 @@ public class RecvTask implements Runnable {
 		Log.i(TAG, "Consuming ACK packet");
 		try {
 			mRecvAck.put(ackPack);
+			mClock.logRecvAckTime(ackPack.getSequenceNumber());
 		} catch (InterruptedException e) {
 			Log.e(TAG, "RecvTask interrupted while blocking on the received ACK queue");
 			e.printStackTrace();

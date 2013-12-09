@@ -20,11 +20,6 @@ public class LinkLayer implements Dot11Interface {
 	public static final int MODE_STANDARD = 0;
 	public static final int MODE_ROUND_TRIP_TEST = 1;
 	public static int layerMode;
-
-	// Destination MAC for round trip tests
-	public static final short ROUND_TRIP_TEST_MAC = 602;
-	// Number of packets to send for round trip tests
-	private static final int NUM_RTT_PACKETS = 20;
 	
 	private static final String TAG = "LinkLayer";
 	public static int debugLevel = 1;
@@ -318,9 +313,10 @@ public class LinkLayer implements Dot11Interface {
 	 * Queues up packets for a round trip time test
 	 */
 	private void queueRTTPackets() {
-		for(int i = 0; i < NUM_RTT_PACKETS; i++) {
+		for(int i = 0; i < RoundTripTimeTest.NUM_RTT_PACKETS; i++) {
 			Packet dataPacket = new Packet(Packet.CTRL_DATA_CODE, 
-					ROUND_TRIP_TEST_MAC, ourMAC, new byte[0], 0);
+					RoundTripTimeTest.RTT_TEST_DEST_MAC, ourMAC, 
+					new byte[] {(byte)i}, 1);
 			
 			// Wait until there's room in the queue. Sleeping on this thread
 			// shouldn't cause any problems - if we're in RTT mode there won't be

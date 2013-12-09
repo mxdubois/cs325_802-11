@@ -1,7 +1,8 @@
 package wifi;
 
-import java.util.HashMap;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import rf.RF;
@@ -134,18 +135,55 @@ public class NSyncClock {
 	
 	public long ackWaitEst() {
 		// TODO implement meeeeee!
-		return 20L;
+		return 5000L * NANO_PER_MILLIS;
 	}
 	
-	public void logTransmitTime(int packetHash, long time) {
-		mTimers.put(packetHash, new TimerWrapper(time));
+	/**
+	 * Logs a transmit time for a packet with specified sequence number
+	 * @param packetSeq
+	 */
+	public void logTransmitTime(int packetSeq) {
+		long time = currentTimeMillis();
+		mTimers.put(packetSeq, new TimerWrapper(time));
+		Log.d(TAG, "Logging " + packetSeq + " start time: " + time);
 	}
 	
-	public long logRecvAckTime(int packetHash, long time, boolean deleteRecord) {
-		long dur = mTimers.get(packetHash).start;
-		if(deleteRecord)
-			mTimers.remove(packetHash);
-		return dur;
+	/**
+	 * Logs an ack received time for a packet with the specified sequence number
+	 * @param packetSeq
+	 * @return Time between transmission and recieve for the specified packet
+	 */
+	public long logRecvAckTime(int packetSeq) {
+		long time = currentTimeMillis();
+		TimerWrapper timer = mTimers.get(packetSeq);
+		timer.end = time;
+
+		long durTime = time - timer.start;
+		Log.d(TAG, "Duration time for packet seq num " + packetSeq
+				+ ": " + durTime);
+		return durTime;
+	}
+	
+	/**
+	 * Processes round trip time test results and returns the average time
+	 * @return The average round trip time
+	 */
+	public long processRTTResults() {
+		long totalTime = 0;
+		int timersProcessed = 0;
+		Set<Integer> keys = mTimers.keySet();
+		for(Integer i : keys) {
+			TimerWrapper curWrap = mTimers.get(i);
+			if(curWrap.end != TimerWrapper.NOT_SET) {
+				totalTime += curWrap.end - curWrap.start;
+				timersProcessed++;
+			}
+		}
+		long avgTime = totalTime / timersProcessed;
+		Log.i(TAG, "Average RTT from " + timersProcessed
+				+ " data packets: " + avgTime + ". ACKS not received for " 
+				+ (RoundTripTimeTest.NUM_RTT_PACKETS - timersProcessed) + " packets");
+		return avgTime;
 	}
 
 	//--------------------------------------------------------------------------
@@ -176,11 +214,15 @@ public class NSyncClock {
 	}
 	
 	private class TimerWrapper {
+		
+		public static final int NOT_SET = -1;
+		
 		public long start;
 		public long end;
 		
 		public TimerWrapper(long startTime) {
 			start = startTime;
+			end = NOT_SET;
 		}
 	}
 }

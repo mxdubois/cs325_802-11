@@ -157,10 +157,10 @@ public class SendTask implements Runnable {
 					// TODO in theory some jerkface could jump on the channel while we're updating the beacon
 					// TODO handle problems with transmit
 					int status = transmit(mPacket);
-					mTryCount++;
 					// Log tranmit time if we're in RTT test mode
 					if(LinkLayer.layerMode == LinkLayer.MODE_ROUND_TRIP_TEST)
-						mClock.logTransmitTime(mPacket.hashCode(), mRF.clock());
+						mClock.logTransmitTime(mPacket.getSequenceNumber());
+					mTryCount++;
 					if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
 						// Wait for an ack
 						setState(WAITING_FOR_ACK);
@@ -190,10 +190,16 @@ public class SendTask implements Runnable {
 						mHostStatus.set(LinkLayer.TX_FAILED);
 					} else {
 						// success! we're done because we succeeded!!!
-						Log.d(TAG, "Sender received packet" + 
+						Log.d(TAG, "Sender received packet " + 
 								mPacket.getSequenceNumber());
 						mHostStatus.set(LinkLayer.TX_DELIVERED);
 						NSyncClock.dance();
+						
+						// Check if the RTT test is done
+						if(LinkLayer.layerMode == LinkLayer.MODE_ROUND_TRIP_TEST &&
+								mPacket.getSequenceNumber() == 
+								RoundTripTimeTest.NUM_RTT_PACKETS - 1)
+							mClock.processRTTResults();							
 					}
 					
 					// Moving on
@@ -297,8 +303,9 @@ public class SendTask implements Runnable {
 	}
 	
 	private int transmit(Packet p) {
-		Log.i(TAG, "Transmitting the following packet, try " + 
-				mTryCount + "\n    " + p.toString());
+		Log.i(TAG, "Transmitting packet type " + p.getType()
+				+ ", seq num " + p.getSequenceNumber() 
+				+ ", to " + p.getDestAddr() + ". try " + mTryCount);
 		return mRF.transmit(p.getBytes());
 	}
 	

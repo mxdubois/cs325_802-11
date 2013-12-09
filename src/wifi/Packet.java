@@ -236,7 +236,6 @@ public class Packet implements Comparable<Packet>{
 			data = new byte[0];
 		} else {
 			data = new byte[getDataLen()];
-			Log.i(TAG, "Buffer of length " + getDataLen() + ". Total length " + mPacket.limit());
 			for (int i = 0; i < getDataLen(); i++)
 	         data[i] = mPacket.get(i+HEADER_SIZE); 
 		}
