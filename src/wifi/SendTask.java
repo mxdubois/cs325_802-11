@@ -158,6 +158,9 @@ public class SendTask implements Runnable {
 					// TODO handle problems with transmit
 					int status = transmit(mPacket);
 					mTryCount++;
+					// Log tranmit time if we're in RTT test mode
+					if(LinkLayer.layerMode == LinkLayer.MODE_ROUND_TRIP_TEST)
+						mClock.logTransmitTime(mPacket.hashCode(), mRF.clock());
 					if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
 						// Wait for an ack
 						setState(WAITING_FOR_ACK);

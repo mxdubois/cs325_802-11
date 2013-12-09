@@ -1,5 +1,7 @@
 package wifi;
 
+import java.util.HashMap;
+
 public class NSyncClock {
 	
 	private static final boolean DEBUG = LinkLayer.debugLevel > 0;
@@ -7,10 +9,13 @@ public class NSyncClock {
 	public final static short BEACON_ADDR = (short) 0xFFFF;
 	private long mOffsetNano = 0L; // offset in nanoseconds
 	
+	// For keeping track of RTT times
+	private HashMap<Integer, TimerWrapper> mTimers;
+	
 	public static final long NANO_SEC_PER_MS = 1000000L;
 	
 	public NSyncClock() {
-		
+		mTimers = new HashMap<Integer, TimerWrapper>();
 	}
 	
 	public long nanoTime() {
@@ -48,6 +53,17 @@ public class NSyncClock {
 		return 20L;
 	}
 	
+	public void logTransmitTime(int packetHash, long time) {
+		mTimers.put(packetHash, new TimerWrapper(time));
+	}
+	
+	public long logRecvAckTime(int packetHash, long time, boolean deleteRecord) {
+		long dur = mTimers.get(packetHash).start;
+		if(deleteRecord)
+			mTimers.remove(packetHash);
+		return dur;
+	}
+	
 	// REALLY REALLY IMPORTANT METHODS
 	// ------------------------
 	
@@ -73,6 +89,15 @@ public class NSyncClock {
 				break;
 				
 			}
+		}
+	}
+	
+	private class TimerWrapper {
+		public long start;
+		public long end;
+		
+		public TimerWrapper(long startTime) {
+			start = startTime;
 		}
 	}
 }

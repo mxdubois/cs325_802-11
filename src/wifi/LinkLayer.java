@@ -16,6 +16,16 @@ import rf.RF;
  */
 public class LinkLayer implements Dot11Interface {
 
+	// This layer's mode
+	public static final int MODE_STANDARD = 0;
+	public static final int MODE_ROUND_TRIP_TEST = 1;
+	public static int layerMode;
+
+	// Destination MAC for round trip tests
+	public static final short ROUND_TRIP_TEST_MAC = 602;
+	// Number of packets to send for round trip tests
+	private static final int NUM_RTT_PACKETS = 20;
+	
 	private static final String TAG = "LinkLayer";
 	public static int debugLevel = 1;
 
@@ -35,13 +45,12 @@ public class LinkLayer implements Dot11Interface {
 
 	public static final int RECV_DATA_BUFFER_SIZE = 4;
 	public static final int RECV_ACK_BUFFER_SIZE = 4;
-	
+
 	private static final int MAX_OUT_DATA_PACKETS = 4;
 
 
 	private RF theRF;           // You'll need one of these eventually
 	private short ourMAC; // Our MAC address
-	private PrintWriter output; // The output stream we'll write to
 
 	private BlockingQueue<Packet> mRecvData;
 	private BlockingQueue<Packet> mRecvAck;
@@ -66,17 +75,30 @@ public class LinkLayer implements Dot11Interface {
 
 	/**
 	 * Constructor takes a MAC address and the PrintWriter to which our output will
-	 * be written.
+	 * be written. This launches the layer in standard mode
 	 * @param ourMAC  MAC address
 	 * @param output  Output stream associated with GUI
 	 */
 	public LinkLayer(short ourMAC, PrintWriter output) {
-		
-		Log.setStream(output); // Write to the GUI
-		
+		this(ourMAC, output, MODE_STANDARD);
+	}
+
+	/**
+	 * Constructor takes a MAC address, output stream and the layer's mode
+	 * @param ourMAC  MAC address
+	 * @param output  Output stream associated with GUI
+	 * @param mode    Mode to run the layer in, either MODE_STANDARD 
+	 *                or MODE_ROUND_TRIP_TEST
+	 */
+	public LinkLayer(short ourMAC, PrintWriter output, int mode) {
+
+		if(output != null)
+			Log.setStream(output); // Write to the GUI
+
+		layerMode = mode;
+
 		mStatus = new AtomicInteger();
 		this.ourMAC = ourMAC;
-		this.output = output;
 		// TODO check if RF init failed?
 		theRF = new RF(null, null);
 
@@ -86,17 +108,22 @@ public class LinkLayer implements Dot11Interface {
 
 		mClock = new NSyncClock();
 
-		mRecvTask = new RecvTask(theRF, mClock, mSendQueue, mRecvAck, mRecvData, ourMAC);
+		mRecvTask = new RecvTask(theRF, mClock, mSendQueue, 
+				mRecvAck, mRecvData, ourMAC);
 		mRecvThread = new Thread(mRecvTask);
 		mRecvThread.start();
 
-		mSendTask = new SendTask(theRF, mClock, mStatus, mSendQueue, mRecvAck);
+		mSendTask = new SendTask(theRF, mClock, mStatus, 
+				mSendQueue, mRecvAck);
 		mSendThread = new Thread(mSendTask);
 		mSendThread.start();
 
 		mLastRecvDataOffset = 0;
 		mLastRecvData = null;
-		
+
+
+		if(layerMode == MODE_ROUND_TRIP_TEST)
+			queueRTTPackets();
 
 		Log.d(TAG, "Constructor ran.");
 	}
@@ -108,6 +135,10 @@ public class LinkLayer implements Dot11Interface {
 	 * of bytes to send.  See docs for full description.
 	 */
 	public int send(short dest, byte[] data, int len) {
+		// If we're not in standard mode, don't accept any packets
+		if(layerMode != MODE_STANDARD)
+			return 0;
+		
 		// TODO figure out when BAD_ADDRESS should be set. With the 
 		// address specified as a short, and all short values valid
 		// addresses, I don't see how we'd ever get a bad address
@@ -115,13 +146,13 @@ public class LinkLayer implements Dot11Interface {
 			setStatus(BAD_BUF_SIZE);
 			return -1;
 		}
-		
+
 		// Protect ourselves against idiots
 		if(data.length < len) {
 			setStatus(ILLEGAL_ARGUMENT);
 			return -1;
 		}
-		
+
 		// Don't queue more than MAX_OUT_DATA_PACKETS
 		// TODO: should we keep a count instead of searching?
 		// Or separate queues for ack/beacon and data?
@@ -167,7 +198,7 @@ public class LinkLayer implements Dot11Interface {
 	 */
 	public int recv(Transmission t) {
 		Log.i(TAG, "recv() called, waiting for queued data");
-		
+
 		// Only take a new packet if we've fully consumed the last packet
 		if(mLastRecvData == null) {
 			try {
@@ -182,7 +213,7 @@ public class LinkLayer implements Dot11Interface {
 		// Put addresses in Transmission object
 		t.setDestAddr(mLastRecvData.getDestAddr());
 		t.setSourceAddr(mLastRecvData.getSrcAddr());
-		
+
 		int dataLength;
 		int transBufLength = t.getBuf().length;
 		byte[] data = mLastRecvData.getData();
@@ -190,7 +221,7 @@ public class LinkLayer implements Dot11Interface {
 		if(data.length - mLastRecvDataOffset <= transBufLength) {
 			t.setBuf(Arrays.copyOfRange(data, mLastRecvDataOffset, data.length));
 			dataLength = data.length - mLastRecvDataOffset;
-			
+
 			// Reset offset and consume packet
 			mLastRecvDataOffset = 0;
 			mLastRecvData = null;
@@ -198,89 +229,110 @@ public class LinkLayer implements Dot11Interface {
 			// If packet length exceeds buffer length, copy in as much as we can
 			t.setBuf(Arrays.copyOfRange(data, mLastRecvDataOffset, transBufLength));
 			dataLength = transBufLength;  
-			
+
 			// Set offset into packet data for next call, and don't consume packet
 			mLastRecvDataOffset = mLastRecvDataOffset + transBufLength;
 		}                
 		return dataLength;
 	}
 
-/**
- * Returns a current status code.  See docs for full description.
- */
-public int status() {
-	return mStatus.get();
-}
-
-/**
- * Passes command info to your link layer.  See docs for full description.
- */
-public int command(int cmd, int val) {
-
-	Log.i(TAG, "Sending command "+cmd+" with value "+val);
-	switch(cmd) {
-	case 0 : // Options and Settings
-		output.println("LinkLayer: Current Settings: \n" + 
-				"1. debugLevel: " + debugLevel + "\n" +
-				"2. slotSelectionPolicy: " 
-				+ mSendTask.getSlotSelectionPolicy() + "\n" +
-				"3. beaconInterval: " + mSendTask.getBeaconInterval() + "\n");
-		break;
-	case 1: // Debug Level
-		debugLevel = val;
-		break;
-	case 2: // Slot Selection
-		mSendTask.setSlotSelectionPolicy(val);
-		break;
-	case 3: // Beacon Interval
-		mSendTask.setBeaconInterval(val);
-		break;		
+	/**
+	 * Returns a current status code.  See docs for full description.
+	 */
+	public int status() {
+		return mStatus.get();
 	}
-	return 0;
-}
 
-// PACKAGE PRIVATE / PROTECTED METHODS
-//-------------------------
+	/**
+	 * Passes command info to your link layer.  See docs for full description.
+	 */
+	public int command(int cmd, int val) {
 
-// PRIVATE METHODS
-//------------------
-private void setStatus(int code) {
-	mStatus.set(code);
-	if(debugLevel > 0) {
-		switch(code) {
-		case SUCCESS:
-			Log.i(TAG, "Initial value if 802_init is successful");
+		Log.i(TAG, "Sending command "+cmd+" with value "+val);
+		switch(cmd) {
+		case 0 : // Options and Settings
+			Log.i(TAG, "LinkLayer: Current Settings: \n" + 
+					"1. debugLevel: " + debugLevel + "\n" +
+					"2. slotSelectionPolicy: " 
+					+ mSendTask.getSlotSelectionPolicy() + "\n" +
+					"3. beaconInterval: " + mSendTask.getBeaconInterval() + "\n");
 			break;
-		case UNSPECIFIED_ERROR:
-			Log.e(TAG, "General error code");
+		case 1: // Debug Level
+			debugLevel = val;
 			break;
-		case RF_INIT_FAILED:
-			Log.e(TAG, "Attempt to initialize RF layer failed");
+		case 2: // Slot Selection
+			mSendTask.setSlotSelectionPolicy(val);
 			break;
-		case TX_DELIVERED:
-			Log.i(TAG, "Last transmission was acknowledged");
-			break;
-		case TX_FAILED:
-			Log.e(TAG, "Last transmission was abandoned after unsuccessful delivery attempts");
-			break;
-		case BAD_BUF_SIZE:
-			Log.e(TAG, "Buffer size was negative");
-			break;
-		case BAD_ADDRESS:
-			Log.e(TAG, "Pointer to a buffer or address was NULL");
-			break;
-		case BAD_MAC_ADDRESS:
-			Log.e(TAG, "Illegal MAC address was specified");
-			break;
-		case ILLEGAL_ARGUMENT:
-			Log.e(TAG, "One or more arguments are invalid");
-			break;
-		case INSUFFICIENT_BUFFER_SPACE:
-			Log.e(TAG, "Outgoing transmission rejected due to insufficient buffer space");
-			break;
+		case 3: // Beacon Interval
+			mSendTask.setBeaconInterval(val);
+			break;		
 		}
-
+		return 0;
 	}
-}
 
+	// PACKAGE PRIVATE / PROTECTED METHODS
+	//-------------------------
+
+	// PRIVATE METHODS
+	//------------------
+	private void setStatus(int code) {
+		mStatus.set(code);
+		if(debugLevel > 0) {
+			switch(code) {
+			case SUCCESS:
+				Log.i(TAG, "Initial value if 802_init is successful");
+				break;
+			case UNSPECIFIED_ERROR:
+				Log.e(TAG, "General error code");
+				break;
+			case RF_INIT_FAILED:
+				Log.e(TAG, "Attempt to initialize RF layer failed");
+				break;
+			case TX_DELIVERED:
+				Log.i(TAG, "Last transmission was acknowledged");
+				break;
+			case TX_FAILED:
+				Log.e(TAG, "Last transmission was abandoned after unsuccessful delivery attempts");
+				break;
+			case BAD_BUF_SIZE:
+				Log.e(TAG, "Buffer size was negative");
+				break;
+			case BAD_ADDRESS:
+				Log.e(TAG, "Pointer to a buffer or address was NULL");
+				break;
+			case BAD_MAC_ADDRESS:
+				Log.e(TAG, "Illegal MAC address was specified");
+				break;
+			case ILLEGAL_ARGUMENT:
+				Log.e(TAG, "One or more arguments are invalid");
+				break;
+			case INSUFFICIENT_BUFFER_SPACE:
+				Log.e(TAG, "Outgoing transmission rejected due to insufficient buffer space");
+				break;
+			}
+
+		}
+	}
+
+	/**
+	 * Queues up packets for a round trip time test
+	 */
+	private void queueRTTPackets() {
+		for(int i = 0; i < NUM_RTT_PACKETS; i++) {
+			Packet dataPacket = new Packet(Packet.CTRL_DATA_CODE, 
+					ROUND_TRIP_TEST_MAC, ourMAC, new byte[0], 0);
+			
+			// Wait until there's room in the queue. Sleeping on this thread
+			// shouldn't cause any problems - if we're in RTT mode there won't be
+			// any other functionality to block
+			while(mSendQueue.size() >= MAX_OUT_DATA_PACKETS) {
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					Log.e(TAG, e.getMessage());
+				}
+			}
+			mSendQueue.offer(dataPacket);
+		}
+	}
 }
