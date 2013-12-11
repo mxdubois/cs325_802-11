@@ -16,14 +16,11 @@ public class NSyncClock {
 	
 	public static final long NANO_PER_MILLIS = 1000000L;
 	public static final long NANO_PER_MICRO = 1000L;
-	
-	// Define clock unit conversions
-	public static final long NANO_PER_CLOCK_UNIT = NANO_PER_MILLIS;
-	public static final long CLOCK_UNIT_PER_MILLIS = 
-										NANO_PER_CLOCK_UNIT / NANO_PER_MILLIS;
+
 	
 	// The time per slot in our clock units
-	public static final long A_SLOT_TIME = RF.aSlotTime * CLOCK_UNIT_PER_MILLIS;
+	public static final long A_SIFS_TIME = RF.aSIFSTime;
+	public static final long A_SLOT_TIME = RF.aSlotTime;
 	// contention window parameters in slots
 	public static final long CW_MIN = RF.aCWmin;
 	public static final long CW_MAX = RF.aCWmax;
@@ -36,7 +33,7 @@ public class NSyncClock {
 	 * @return
 	 */
 	public static long getSlotTimeNano() {
-		return A_SLOT_TIME * NANO_PER_CLOCK_UNIT;
+		return A_SLOT_TIME * NANO_PER_MILLIS;
 	}
 	
 	//-------------------------------------------------------------------------
@@ -80,7 +77,7 @@ public class NSyncClock {
 	}
 	
 	public long getBeaconIntervalNano() {
-		return mBeaconInterval.get() * NANO_PER_CLOCK_UNIT;
+		return mBeaconInterval.get() * NANO_PER_MILLIS;
 	}
 	
 	public void setBeaconInterval(long clockUnits) {

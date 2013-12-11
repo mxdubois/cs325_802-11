@@ -17,11 +17,9 @@ public class Packet implements Comparable<Packet>{
 	
 	private static final String TAG = "Packet";
 	
-	// TODO wtf are correct values for these?
-	public static final long SIFS = RF.aSIFSTime * NSyncClock.NANO_PER_MILLIS;
-	public static final long PIFS = 2*SIFS;
-	public static final long DIFS = 4*SIFS;
-	public static final long EIFS = 8*SIFS;
+	public static final long SIFS = NSyncClock.A_SIFS_TIME;
+	// DIFS according to spec.
+	public static final long DIFS = SIFS + 2*NSyncClock.A_SLOT_TIME;
 	
 	public static final short MAX_SEQ_NUM = 4095; // 12 bits of data: (2^12)-1
 	public static final int MAX_DATA_BYTES = 2038;

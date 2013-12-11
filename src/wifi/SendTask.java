@@ -51,6 +51,8 @@ public class SendTask implements Runnable {
 	public static final long CW_MAX = NSyncClock.CW_MAX;
 	private long mCW = NSyncClock.CW_MIN;
 
+	private boolean mIsWaitingForAck;
+
 	private static final long A_SLOT_TIME = NSyncClock.A_SLOT_TIME;
 
 	private static final long EPSILON = 0;
@@ -78,6 +80,30 @@ public class SendTask implements Runnable {
 		boolean done = false;
 		while(!Thread.interrupted() && !done) {
 			long elapsed = mClock.time() - mLastEvent;
+			
+			// Handle ack-waiting logic if necesssary
+			if(mIsWaitingForAck) {
+				if(mTryCount >= MAX_TRY_COUNT || receivedAckFor(mPacket)) {
+					if(mTryCount >= MAX_TRY_COUNT) {
+						// we're done because we give up
+						Log.d(TAG, "Giving up on packet " + 
+								mPacket.getSequenceNumber());
+						mHostStatus.set(LinkLayer.TX_FAILED);
+					} else {
+						// success! we're done because we succeeded!!!
+						Log.d(TAG, "Sender received packet" + 
+								mPacket.getSequenceNumber());
+						mHostStatus.set(LinkLayer.TX_DELIVERED);
+						NSyncClock.dance();
+					}
+					
+					// Moving on
+					mIsWaitingForAck = false;
+					retirePacket();
+					setState(WAITING_FOR_DATA);
+				}
+			}
+			
 			switch(mState) {
 			
 			case WAITING_FOR_DATA:
@@ -200,22 +226,29 @@ public class SendTask implements Runnable {
 						}
 					}
 					
+					// Handle retry logic
+					if(mIsWaitingForAck && elapsed < mAckWait) {
+						// It's not time to send yet. Wait longer.
+						try {
+							sleepyTime();
+						} catch(InterruptedException e) {
+							done = true;
+							Log.e(TAG, e.getMessage());		
+						}
+					}
+					
 					// Fire away!
+					// we can ignore bytesSent because ack-waiting retry logic
+					// captures the case where we failed to send whole packet
 					int bytesSent = transmit(mPacket);
 					if(mPacket.isBeacon()) 
 						mClock.onBeaconTransmit();
 					mTryCount++;
-					
-					if(bytesSent > mPacket.size()) {
-						// We take a semi-naive approach if the RF failed to
-						// send the whole packet. We treat it like a collision
-						// but since we know the packet didn't get out, 
-						// we can skip WAITIING_FOR_ACK, -- we won't get one.
-						prepareForRetry();
-						setState(WAITING_FOR_OPEN_CHANNEL);
-					} else if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
+					if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
 						// Wait for an ack
-						setState(WAITING_FOR_ACK);
+						prepareForRetry();
+						mIsWaitingForAck = true;
+						setState(WAITING_FOR_OPEN_CHANNEL);
 					} else {
 						// Don't bother with retries for ACKS and BEACONS
 						retirePacket();
@@ -223,47 +256,6 @@ public class SendTask implements Runnable {
 					}
 					
 				} else {
-					try {
-						sleepyTime();
-					} catch(InterruptedException e) {
-						done = true;
-						Log.e(TAG, e.getMessage());		
-					}
-				}
-				break;
-				
-			/* TODO 
-			 * optimize. seems like we could be waiting for an open channel
-			 * and waiting packet ifs while we wait for an ack
-			 * we just wouldn't send unless ackWaitTime has elapsed
-			 * it'd be more complicated though...
-			 */
-			case WAITING_FOR_ACK:
-				// If we're done with this packet
-				if(mTryCount >= MAX_TRY_COUNT || receivedAckFor(mPacket)) {
-					if(mTryCount >= MAX_TRY_COUNT) {
-						// we're done because we give up
-						Log.d(TAG, "Giving up on packet " + 
-								mPacket.getSequenceNumber());
-						mHostStatus.set(LinkLayer.TX_FAILED);
-					} else {
-						// success! we're done because we succeeded!!!
-						Log.d(TAG, "Sender received packet" + 
-								mPacket.getSequenceNumber());
-						mHostStatus.set(LinkLayer.TX_DELIVERED);
-						NSyncClock.dance();
-					}
-					
-					// Moving on
-					retirePacket();
-					setState(WAITING_FOR_DATA);
-				} else if(elapsed >= mAckWait) {
-					// No ack, resend.
-					Log.d(TAG, "No ACK received. Collision has occured.");
-					prepareForRetry();
-					setState(WAITING_FOR_OPEN_CHANNEL);
-				} else {
-					// there's nothing to do yet, sleepytime
 					try {
 						sleepyTime();
 					} catch(InterruptedException e) {
