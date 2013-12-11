@@ -2,6 +2,7 @@ package wifi;
 
 import java.util.HashMap;
 import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -28,6 +29,7 @@ public class SendTask implements Runnable {
 	private BlockingQueue<Packet> mRecvAckQueue;
 	private NSyncClock mClock;
 	private AtomicInteger mHostStatus;
+	private Random mRandom;
 	
 	// CURRENT STATE
 	private Packet mPacket;
@@ -65,7 +67,8 @@ public class SendTask implements Runnable {
 			AtomicInteger hostStatus,
 			PriorityBlockingQueue<Packet> sendQueue, 
 			BlockingQueue<Packet> sendAckQueue,
-			BlockingQueue<Packet> recvAckQueue) 
+			BlockingQueue<Packet> recvAckQueue,
+			short mac) 
 	{		
 		mRF = rf;
 		mSendQueue = sendQueue;
@@ -76,6 +79,7 @@ public class SendTask implements Runnable {
 		mAckWait = mClock.ackWaitEst();
 		mLastSeqs = new HashMap<Short,Short>();
 		Log.d(TAG, TAG + " initialized!");
+		mRandom = new Random(mac);
 		setState(WAITING_FOR_DATA);
 	}
 	
@@ -379,7 +383,7 @@ public class SendTask implements Runnable {
 			// but clamp it to our specified range
 			mCW = Math.max(CW_MIN, Math.min(newCW, CW_MAX));
 			// Get a random backoff in the range [0,mCW]
-			mBackoff = Utilities.nextLong(mCW + 1L) * A_SLOT_TIME;
+			mBackoff = Utilities.nextLong(mRandom, mCW + 1L) * A_SLOT_TIME;
 			
 			// If slot selection override
 			if(mSlotSelectionPolicy != 0) {

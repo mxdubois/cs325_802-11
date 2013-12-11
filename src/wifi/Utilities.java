@@ -16,11 +16,11 @@ public class Utilities {
 	 * @param n - long upper bound exclusive
 	 * @return
 	 */
-	public static long nextLong(long n) {
+	public static long nextLong(Random rand, long n) {
 		// error checking and 2^x checking removed for simplicity.
 		long bits, val;
 		do {
-			bits = (random.nextLong() << 1) >>> 1;
+			bits = (rand.nextLong() << 1) >>> 1;
 			val = bits % n;
 		} while (bits-val+(n-1) < 0L);
 		return val;
