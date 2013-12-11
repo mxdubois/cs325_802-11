@@ -18,19 +18,19 @@ public class RecvTask implements Runnable {
 	short mHostAddr;
 	BlockingQueue<Packet> mRecvData;
 	BlockingQueue<Packet> mRecvAck;
-	BlockingQueue<Packet> mSendQueue;
+	BlockingQueue<Packet> mSendAckQueue;
 	HashMap<Short, Short> mLastSeqs; // Maps src addrs to last seq nums received
 	NSyncClock mClock;
 		
 	// TODO lots of parameters. Builder pattern?
-	public RecvTask(RF rf, NSyncClock clock, BlockingQueue<Packet> sendQueue,
+	public RecvTask(RF rf, NSyncClock clock, BlockingQueue<Packet> sendAckQueue,
 			BlockingQueue<Packet> recvAck, BlockingQueue<Packet> recvData, short hostAddr) {
 		mRF = rf;
 		mClock = clock;
 		mRecvData = recvData;
 		mRecvAck = recvAck;
 		mHostAddr = hostAddr;
-		mSendQueue = sendQueue;
+		mSendAckQueue = sendAckQueue;
 		mLastSeqs = new HashMap<Short, Short>();
 		Log.i(TAG, TAG + " initialized");
 	}
@@ -134,7 +134,7 @@ public class RecvTask implements Runnable {
 			// Prepare and queue ACK
 			Packet ack = new Packet(Packet.CTRL_ACK_CODE, packetSrcAddr, 
 					mHostAddr, new byte[0], 0, packetSeqNum);
-			mSendQueue.put(ack);
+			mSendAckQueue.put(ack);
 		} catch (InterruptedException e) {
 			Log.e(TAG, "RecvTask interrupted when blocking on the send queue");
 		}
