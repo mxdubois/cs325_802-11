@@ -169,6 +169,7 @@ public class SendTask implements Runnable {
 				// Do not proceed further unless we have a packet
 				if(mPacket == null) {
 					setState(WAITING_FOR_DATA);
+					break;
 				}
 				
 				// Otherwise, no acks to send...
