@@ -1,7 +1,9 @@
 package wifi;
 
 import java.util.HashMap;
+import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -51,6 +53,8 @@ public class SendTask implements Runnable {
 	public static final long CW_MAX = NSyncClock.CW_MAX;
 	private long mCW = NSyncClock.CW_MIN;
 
+	private BlockingQueue<Packet> mSendAckQueue;
+
 	private static final long A_SLOT_TIME = NSyncClock.A_SLOT_TIME;
 
 	private static final long EPSILON = 0;
@@ -60,10 +64,12 @@ public class SendTask implements Runnable {
 			NSyncClock nSyncClock,
 			AtomicInteger hostStatus,
 			PriorityBlockingQueue<Packet> sendQueue, 
+			BlockingQueue<Packet> sendAckQueue,
 			BlockingQueue<Packet> recvAckQueue) 
 	{		
 		mRF = rf;
 		mSendQueue = sendQueue;
+		mSendAckQueue = sendAckQueue;
 		mRecvAckQueue = recvAckQueue;
 		mClock = nSyncClock;
 		mHostStatus = hostStatus;
@@ -138,8 +144,30 @@ public class SendTask implements Runnable {
 				break;
 			
 			case WAITING_PACKET_IFS:
+				// 802.11 spec, Section 9.3.2.8:
+				// After a successful reception of a frame requiring
+				// acknowledgment, transmission of the ACK frame shall 
+				// commence after a SIFS period, without regard to the
+				// busy/idle state of the medium.
+				synchronized(mSendAckQueue) {
+					if(elapsed >=  Packet.SIFS && mSendAckQueue.size() > 0) {
+						if(mClock.time() % 50 > EPSILON) {
+							// busy wait until we hit an increment of 50 units
+							break;
+						}
+						Packet ack = mSendAckQueue.poll();
+						if(ack != null)	{
+							mRF.transmit(ack.getBytes());
+							setState(WAITING_FOR_OPEN_CHANNEL);
+						}
+					}
+				}
+				
+				// Otherwise, no acks to send...
 				long ifs = mPacket.getIFS();
 				long timeLeft = ifs - elapsed;
+				
+				// ...do the usual routine:
 				if(mRF.inUse() || mRF.getIdleTime() < elapsed) {
 					// Someone jumped on, determine how long we actually waited
 					//  this is "wasted time", but we can travel back in time
@@ -147,11 +175,9 @@ public class SendTask implements Runnable {
 					long stateChangeTime = mClock.time() - wastedTime;
 					setState(WAITING_FOR_OPEN_CHANNEL, stateChangeTime);
 					
-					// Else if waited long enough && within EPSILON of 50 units
-					// we might use an EPSILON if we didn't trust the OS to
-					// wake us exactly on a 50 unit increment.
 				} else if(timeLeft <= 0) {
 					long time = mClock.time();
+					// if waited long enough && within EPSILON of 50 units
 					if(time % 50 > EPSILON) {
 						// Busy wait until the next 50 unit boundary
 						break;
@@ -206,7 +232,7 @@ public class SendTask implements Runnable {
 						mClock.onBeaconTransmit();
 					mTryCount++;
 					
-					if(bytesSent > mPacket.size()) {
+					if(bytesSent < mPacket.size()) {
 						// We take a semi-naive approach if the RF failed to
 						// send the whole packet. We treat it like a collision
 						// but since we know the packet didn't get out, 

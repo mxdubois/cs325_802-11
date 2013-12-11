@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -35,6 +36,7 @@ public class LinkLayer implements Dot11Interface {
 
 	public static final int RECV_DATA_BUFFER_SIZE = 4;
 	public static final int RECV_ACK_BUFFER_SIZE = 4;
+	public static final int  SEND_ACK_BUFFER_SIZE = 4;
 	
 	private static final int MAX_OUT_DATA_PACKETS = 4;
 
@@ -45,7 +47,9 @@ public class LinkLayer implements Dot11Interface {
 
 	private BlockingQueue<Packet> mRecvData;
 	private BlockingQueue<Packet> mRecvAck;
+	private BlockingQueue<Packet> mSendAckQueue;
 	private PriorityBlockingQueue<Packet> mSendQueue;
+	
 
 	private Thread mRecvThread;
 	private RecvTask mRecvTask;
@@ -57,6 +61,7 @@ public class LinkLayer implements Dot11Interface {
 
 	private NSyncClock mClock;
 	private AtomicInteger mStatus;
+
 
 	// STATUS CODES TO IMPLEMENT
 	// TODO UNSPECIFIED_ERRORs
@@ -81,16 +86,17 @@ public class LinkLayer implements Dot11Interface {
 		theRF = new RF(null, null);
 
 		mRecvData = new ArrayBlockingQueue<Packet>(RECV_DATA_BUFFER_SIZE);
+		mSendAckQueue = new ArrayBlockingQueue<Packet>(SEND_ACK_BUFFER_SIZE);
 		mRecvAck = new ArrayBlockingQueue<Packet>(RECV_ACK_BUFFER_SIZE);
 		mSendQueue = new PriorityBlockingQueue<Packet>();
 
 		mClock = new NSyncClock(ourMAC);
 
-		mRecvTask = new RecvTask(theRF, mClock, mSendQueue, mRecvAck, mRecvData, ourMAC);
+		mRecvTask = new RecvTask(theRF, mClock, mSendAckQueue, mRecvAck, mRecvData, ourMAC);
 		mRecvThread = new Thread(mRecvTask);
 		mRecvThread.start();
 
-		mSendTask = new SendTask(theRF, mClock, mStatus, mSendQueue, mRecvAck);
+		mSendTask = new SendTask(theRF, mClock, mStatus, mSendQueue, mSendAckQueue, mRecvAck);
 		mSendThread = new Thread(mSendTask);
 		mSendThread.start();
 
