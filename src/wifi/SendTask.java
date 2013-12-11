@@ -165,6 +165,11 @@ public class SendTask implements Runnable {
 						setState(WAITING_FOR_OPEN_CHANNEL);
 					}
 				}
+
+				// Do not proceed further unless we have a packet
+				if(mPacket == null) {
+					setState(WAITING_FOR_DATA);
+				}
 				
 				// Otherwise, no acks to send...
 				long ifs = mPacket.getIFS();
