@@ -70,7 +70,7 @@ public class RecvTask implements Runnable {
 		try {
 			mRecvAck.put(ackPack);
 			if(LinkLayer.layerMode == LinkLayer.MODE_ROUND_TRIP_TEST)
-					mClock.logRecvAckTime(ackPack.getSequenceNumber());
+				mClock.logRecvAckTime(ackPack.getSequenceNumber());
 		} catch (InterruptedException e) {
 			Log.e(TAG, "RecvTask interrupted while blocking on the received ACK queue");
 			e.printStackTrace();

@@ -162,20 +162,10 @@ public class LinkLayer implements Dot11Interface {
 		}
 
 		// Don't queue more than MAX_OUT_DATA_PACKETS
-		// TODO: should we keep a count instead of searching?
-		// Or separate queues for ack/beacon and data?
-		int dataPacketCount = 0;
-		synchronized(mSendQueue) {
-			Iterator<Packet> iter = mSendQueue.iterator();
-			while(iter.hasNext()) {
-				if(iter.next().getType() == Packet.CTRL_DATA_CODE)
-					dataPacketCount++;
-				if(dataPacketCount == MAX_OUT_DATA_PACKETS) {
-					Log.e(TAG, MAX_OUT_DATA_PACKETS + 
-							" data packets already queued. Ignoring a new packet");
-					return 0;
-				}					
-			}
+		if(mSendQueue.size() > MAX_OUT_DATA_PACKETS) {		
+			Log.e(TAG, MAX_OUT_DATA_PACKETS + 
+					" data packets already queued. Ignoring a new packet");
+			return 0;
 		}
 
 		Log.d(TAG,"Queueing "+len+" bytes to "+dest);
