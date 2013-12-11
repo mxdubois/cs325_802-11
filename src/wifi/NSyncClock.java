@@ -102,7 +102,7 @@ public class NSyncClock {
 				Packet.BEACON_MAC, 
 				mOurMAC, 
 				data,
-				data.length);
+				data.length, time());
 	}
 	
 	/**

@@ -47,7 +47,7 @@ public class RecvTask implements Runnable {
 			Log.i(TAG, "RecvThread got a transmission for " + packDest);
 		   // Only consume beacons and data packets sent to this host
 			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) {
-				Packet packet = Packet.parse(recvTrans);
+				Packet packet = Packet.parse(recvTrans, mClock.time());
 				// Packet is null if not valid (CRC's didn't match)
 				if(packet == null)
 					Log.i(TAG, "Throwing out a corrupted packet. \n ");

@@ -170,7 +170,12 @@ public class LinkLayer implements Dot11Interface {
 			toQueue = (int)Math.min(toQueue, Packet.MAX_DATA_BYTES);
 			byte[] sendData  = new byte[toQueue];
 			System.arraycopy(data, queued, sendData, 0, toQueue);
-			Packet packet = new Packet(code, dest, ourMAC, sendData, len);
+			Packet packet = new Packet(code, 
+										dest, 
+										ourMAC, 
+										sendData, 
+										len, 
+										mClock.time());
 			// Queue it for sending
 			mSendQueue.offer(packet);
 			queued = queued + toQueue;

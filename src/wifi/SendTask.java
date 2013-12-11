@@ -22,6 +22,7 @@ public class SendTask implements Runnable {
 	private static final int WAITING_PACKET_IFS = 3;
 	private static final int WAITING_BACKOFF = 4;
 	private static final int WAITING_FOR_ACK = 5;
+	private static final int WAITING_SIFS = 6;
 
 	// ESSENTIALS
 	private RF mRF;
@@ -87,6 +88,7 @@ public class SendTask implements Runnable {
 	public void run() {
 		boolean done = false;
 		while(!Thread.interrupted() && !done) {
+			
 			long elapsed = mClock.time() - mLastEvent;
 			switch(mState) {
 			
@@ -139,18 +141,6 @@ public class SendTask implements Runnable {
 				break;
 			
 			case WAITING_FOR_OPEN_CHANNEL:
-				if(!mRF.inUse()) {
-					setState(WAITING_PACKET_IFS);
-				} else {
-					try {
-						sleepyTime();
-					} catch(InterruptedException e) {
-						done = true;
-						Log.e(TAG, e.getMessage());		
-					}
-				}
-				break;
-			
 			case WAITING_PACKET_IFS:
 				// 802.11 spec, Section 9.3.2.8:
 				// After a successful reception of a frame requiring
@@ -158,15 +148,18 @@ public class SendTask implements Runnable {
 				// commence after a SIFS period, without regard to the
 				// busy/idle state of the medium.
 				Packet ack = mSendAckQueue.peek();
-				if(elapsed >=  Packet.SIFS && ack != null) {
-					if(mClock.time() % 50 > EPSILON) {
-						// busy wait until we hit an increment of 50 units
-						break;
+				if(ack != null) {
+					long ackElapsed = mClock.time() - ack.getTimeInstantiated();
+					if(ackElapsed >=  Packet.SIFS) {
+						if(mClock.time() % 50 > EPSILON) {
+							// busy wait until we hit an increment of 50 units
+							break;
+						}
+						Log.d(TAG, "Sending ack.");
+						mRF.transmit(ack.getBytes());
+						mSendAckQueue.poll();
+						setState(WAITING_FOR_OPEN_CHANNEL);
 					}
-					Log.d(TAG, "Sending ack.");
-					mRF.transmit(ack.getBytes());
-					mSendAckQueue.poll();
-					setState(WAITING_FOR_OPEN_CHANNEL);
 				}
 				
 				// Otherwise, no acks to send...

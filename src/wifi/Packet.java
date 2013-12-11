@@ -43,12 +43,15 @@ public class Packet implements Comparable<Packet>{
 	private int mPacketSize; // Total packet length
 
 	private boolean mPacketInitialized;
+
+	private long mTimeInstantiated;
 	
-	public Packet(int type, short dest, short src, byte[] data, int len) {
-		this(type, dest, src, data, len, (short) 0);
+	public Packet(int type, short dest, short src, byte[] data, int len, long timeInstantiated) {
+		this(type, dest, src, data, len, (short) 0, timeInstantiated);
 	}
 	
-	public Packet(int type, short dest, short src, byte[] data, int len, short seqNum) {
+	public Packet(int type, short dest, short src, byte[] data, int len, short seqNum, long timeInstantiated) {
+		mTimeInstantiated = timeInstantiated;
 		// If len exceeds the size of the data buffer, add the entire buffer
 		int dataSize = Math.min(len, data.length);
 
@@ -71,11 +74,12 @@ public class Packet implements Comparable<Packet>{
 	 * no error checking, it assumes argument constitutes a valid packet
 	 * @param packet
 	 */
-	private Packet(byte[] packet) {
+	private Packet(byte[] packet, long timeInstantiated) {
 		mPacketSize = packet.length;
 		//mPacket = ByteBuffer.allocate(mPacketSize).order(ByteOrder.BIG_ENDIAN);
 		mPacket = ByteBuffer.wrap(packet).order(ByteOrder.BIG_ENDIAN);
 		mPacketInitialized = true;
+		mTimeInstantiated = timeInstantiated;
 	}
 
 	private void buildHeader(int type, short dest, short src, short seqNum) {
@@ -198,6 +202,10 @@ public class Packet implements Comparable<Packet>{
 		return retry == 1;
 	}
 	
+	public long getTimeInstantiated() {
+		return mTimeInstantiated;
+	}
+	
 	public short getSrcAddr() {
 		return mPacket.getShort(CONTROL_SIZE + DEST_ADDR_SIZE);
 	}
@@ -278,12 +286,12 @@ public class Packet implements Comparable<Packet>{
 	 * @param packet The byte array to parse
 	 * @return The packet object, or null if packet is invalid
 	 */
-	public static Packet parse(byte[] packet) {
+	public static Packet parse(byte[] packet, long timeInstantiated) {
 		Packet newPacket;
 		if(packet.length < HEADER_SIZE + CRC_SIZE)
 			newPacket = null; // Packet is of insufficient length
 		else {
-			newPacket = new Packet(packet);
+			newPacket = new Packet(packet, timeInstantiated);
 			// Check packet validity (CRC), return null if packet is not valid
 			if(!newPacket.checkPacketValidity()) newPacket = null;
 		}
