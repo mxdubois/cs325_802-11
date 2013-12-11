@@ -78,8 +78,11 @@ public class RecvTask implements Runnable {
 	}
 	
 	private void consumeBeacon(Packet beaconPacket, long recvTime) {
-		Log.i(TAG, "Consuming B(E)ACON packet");
-		mClock.consumeBacon(beaconPacket, recvTime);
+		// Don't consume beacons in RTT test mode
+		if(LinkLayer.layerMode != LinkLayer.MODE_ROUND_TRIP_TEST) {
+			Log.i(TAG, "Consuming B(E)ACON packet");
+			mClock.consumeBacon(beaconPacket, recvTime);
+		}
 	}
 	
 	/**

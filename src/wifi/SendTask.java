@@ -93,6 +93,13 @@ public class SendTask implements Runnable {
 		boolean done = false;
 		while(!Thread.interrupted() && !done) {
 			
+			// 802.11 spec, Section 9.3.2.8:
+			// After a successful reception of a frame requiring
+			// acknowledgment, transmission of the ACK frame shall 
+			// commence after a SIFS period, without regard to the
+			// busy/idle state of the medium.
+			processAckQueue();
+			
 			long elapsed = mClock.time() - mLastEvent;
 			switch(mState) {
 			
@@ -145,34 +152,20 @@ public class SendTask implements Runnable {
 				break;
 			
 			case WAITING_FOR_OPEN_CHANNEL:
-			case WAITING_PACKET_IFS:
-				// 802.11 spec, Section 9.3.2.8:
-				// After a successful reception of a frame requiring
-				// acknowledgment, transmission of the ACK frame shall 
-				// commence after a SIFS period, without regard to the
-				// busy/idle state of the medium.
-				Packet ack = mSendAckQueue.peek();
-				if(ack != null) {
-					long ackElapsed = mClock.time() - ack.getTimeInstantiated();
-					if(ackElapsed >=  Packet.SIFS) {
-						if(mClock.time() % 50 > EPSILON) {
-							// busy wait until we hit an increment of 50 units
-							break;
-						}
-						Log.d(TAG, "Sending ack.");
-						mRF.transmit(ack.getBytes());
-						mSendAckQueue.poll();
-						setState(WAITING_FOR_OPEN_CHANNEL);
+				if(!mRF.inUse()) {
+					setState(WAITING_PACKET_IFS);
+				} else {
+					try {
+						sleepyTime();
+					} catch(InterruptedException e) {
+						done = true;
+						Log.e(TAG, e.getMessage());                
 					}
 				}
+				break;
 
-				// Do not proceed further unless we have a packet
-				if(mPacket == null) {
-					setState(WAITING_FOR_DATA);
-					break;
-				}
-				
-				// Otherwise, no acks to send...
+			case WAITING_PACKET_IFS:
+			
 				long ifs = mPacket.getIFS();
 				long timeLeft = ifs - elapsed;
 				
@@ -180,9 +173,10 @@ public class SendTask implements Runnable {
 				if(mRF.inUse() || mRF.getIdleTime() < elapsed) {
 					// Someone jumped on, determine how long we actually waited
 					//  this is "wasted time", but we can travel back in time
-					long wastedTime = elapsed - mRF.getIdleTime();
-					long stateChangeTime = mClock.time() - wastedTime;
-					setState(WAITING_FOR_OPEN_CHANNEL, stateChangeTime);
+					setState(WAITING_FOR_OPEN_CHANNEL);
+//					long wastedTime = elapsed - mRF.getIdleTime();
+//					long stateChangeTime = mClock.time() - wastedTime;
+//					setState(WAITING_FOR_OPEN_CHANNEL, stateChangeTime);
 					
 				} else if(timeLeft <= 0) {
 					long time = mClock.time();
@@ -193,7 +187,8 @@ public class SendTask implements Runnable {
 					}
 					Log.d(TAG, "done waiting IFS at " + time);
 					setState(WAITING_BACKOFF);
-				} else {
+				} 
+				else {
 					try {
 						sleepyTime();
 					} catch(InterruptedException e) {
@@ -209,10 +204,11 @@ public class SendTask implements Runnable {
 					// Someone jumped on, determine how long we actually waited
 					// before they got on, subtract that from backoff
 					// rest is "wasted time", but we can travel back in time
-					long wastedTime = elapsed - mRF.getIdleTime();
-					long stateChangeTime = mClock.time() - wastedTime;
-					mBackoff = mBackoff - (elapsed - wastedTime);
-					setState(WAITING_FOR_OPEN_CHANNEL, stateChangeTime);
+					setState(WAITING_FOR_OPEN_CHANNEL);
+//					long wastedTime = elapsed - mRF.getIdleTime();
+//					long stateChangeTime = mClock.time() - wastedTime;
+//					mBackoff = mBackoff - (elapsed - wastedTime);
+//					setState(WAITING_FOR_OPEN_CHANNEL, stateChangeTime);
 					
 					// Else if waited long enough && within EPSILON of 50 units
 					// we might use an EPSILON if we didn't trust the OS to
@@ -337,18 +333,17 @@ public class SendTask implements Runnable {
 			Log.d(TAG, "Waiting for data.");
 			break;
 		case WAITING_FOR_OPEN_CHANNEL:
-//			Log.d(TAG, "Waiting for open channel. Try count: " + mTryCount);
+			Log.d(TAG, "Waiting for open channel. Try count: " + mTryCount);
 			break;
 		case WAITING_PACKET_IFS:
 			long p = mPacket.getPriority();
-//			Log.d(TAG, "Waiting packet priority: " + p);
+			Log.d(TAG, "Waiting packet priority: " + p);
 			break;
 		case WAITING_BACKOFF:
-//			Log.d(TAG, "Waiting backoff: " + mBackoff);
+			Log.d(TAG, "Waiting backoff: " + mBackoff);
 			break;
 		case WAITING_FOR_ACK:
-//			double ms = mAckWaitNanoSec / NANO_SEC_PER_MS;
-//			Log.d(TAG, "Waiting " + ms + "ms for ACK.");
+			Log.d(TAG, "Waiting " + mClock.ackWaitEst() + "ms for ACK.");
 			break;
 		}
 	}
@@ -464,5 +459,21 @@ public class SendTask implements Runnable {
 		}
 
 		return curSeqNum;
+	}
+	
+	
+	private void processAckQueue() {
+		Packet ack = mSendAckQueue.peek();
+		if(ack != null) {
+			long ackElapsed = mClock.time() - ack.getTimeInstantiated();
+			if(ackElapsed >=  Packet.SIFS) {
+				if(mClock.time() % 50 <= EPSILON) {
+					Log.d(TAG, "Sending ack.");
+					mRF.transmit(ack.getBytes());
+					mSendAckQueue.poll();
+					setState(WAITING_FOR_OPEN_CHANNEL);
+				}
+			}
+		}
 	}
 }

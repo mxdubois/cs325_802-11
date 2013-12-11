@@ -132,8 +132,9 @@ public class LinkLayer implements Dot11Interface {
 		mLastRecvData = null;
 
 		// Queue packets if we're in RTT test mode
-		if(layerMode == MODE_ROUND_TRIP_TEST)
+		if(layerMode == MODE_ROUND_TRIP_TEST) {
 			queueRTTPackets();
+		}
 	}
 
 	// TODO do we need an init method?
