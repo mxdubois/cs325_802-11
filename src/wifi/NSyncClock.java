@@ -23,6 +23,7 @@ public class NSyncClock {
 										NANO_PER_CLOCK_UNIT / NANO_PER_MILLIS;
 	
 	// The time per slot in our clock units
+	public static final long A_SIFS_TIME = RF.aSIFSTime * CLOCK_UNIT_PER_MILLIS;
 	public static final long A_SLOT_TIME = RF.aSlotTime * CLOCK_UNIT_PER_MILLIS;
 	// contention window parameters in slots
 	public static final long CW_MIN = RF.aCWmin;
