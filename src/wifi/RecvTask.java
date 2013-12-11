@@ -18,19 +18,19 @@ public class RecvTask implements Runnable {
 	short mHostAddr;
 	BlockingQueue<Packet> mRecvData;
 	BlockingQueue<Packet> mRecvAck;
-	BlockingQueue<Packet> mSendQueue;
+	BlockingQueue<Packet> mSendAckQueue;
 	HashMap<Short, Short> mLastSeqs; // Maps src addrs to last seq nums received
 	NSyncClock mClock;
 		
 	// TODO lots of parameters. Builder pattern?
-	public RecvTask(RF rf, NSyncClock clock, BlockingQueue<Packet> sendQueue,
+	public RecvTask(RF rf, NSyncClock clock, BlockingQueue<Packet> sendAckQueue,
 			BlockingQueue<Packet> recvAck, BlockingQueue<Packet> recvData, short hostAddr) {
 		mRF = rf;
 		mClock = clock;
 		mRecvData = recvData;
 		mRecvAck = recvAck;
 		mHostAddr = hostAddr;
-		mSendQueue = sendQueue;
+		mSendAckQueue = sendAckQueue;
 		mLastSeqs = new HashMap<Short, Short>();
 		Log.i(TAG, TAG + " initialized");
 	}
@@ -42,11 +42,12 @@ public class RecvTask implements Runnable {
 		Log.i(TAG, "RecvThread running");
 		while(true) {
 			byte[] recvTrans = mRF.receive();
+			long recvTime = mClock.time();
 			short packDest = Packet.parseDest(recvTrans);
 			Log.i(TAG, "RecvThread got a transmission for " + packDest);
 		   // Only consume beacons and data packets sent to this host
 			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) {
-				Packet packet = Packet.parse(recvTrans);
+				Packet packet = Packet.parse(recvTrans, mClock.time());
 				// Packet is null if not valid (CRC's didn't match)
 				if(packet == null)
 					Log.i(TAG, "Throwing out a corrupted packet. \n ");
@@ -55,7 +56,7 @@ public class RecvTask implements Runnable {
 					if(type == Packet.CTRL_ACK_CODE) {
 						consumeAck(packet);
 					} else if(type == Packet.CTRL_BEACON_CODE) {
-						consumeBeacon(packet);
+						consumeBeacon(packet, recvTime);
 					} else if(type == Packet.CTRL_DATA_CODE) {
 						consumeData(packet);
 					}
@@ -75,9 +76,9 @@ public class RecvTask implements Runnable {
 		}
 	}
 	
-	private void consumeBeacon(Packet beaconPacket) {
+	private void consumeBeacon(Packet beaconPacket, long recvTime) {
 		Log.i(TAG, "Consuming B(E)ACON packet");
-		mClock.consumeBacon(beaconPacket);
+		mClock.consumeBacon(beaconPacket, recvTime);
 	}
 	
 	/**
@@ -121,6 +122,7 @@ public class RecvTask implements Runnable {
 			// Queue packet for delivery
 			try {
 				mRecvData.put(dataPacket);
+				Log.d(TAG, "queued ack for sending");
 			} catch (InterruptedException e) {
 				Log.e(TAG, "Interrupted when blocking on the receive data queue");
 			}
@@ -134,7 +136,7 @@ public class RecvTask implements Runnable {
 			// Prepare and queue ACK
 			Packet ack = new Packet(Packet.CTRL_ACK_CODE, packetSrcAddr, 
 					mHostAddr, new byte[0], 0, packetSeqNum);
-			mSendQueue.put(ack);
+			mSendAckQueue.put(ack);
 		} catch (InterruptedException e) {
 			Log.e(TAG, "RecvTask interrupted when blocking on the send queue");
 		}

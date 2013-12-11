@@ -3,6 +3,9 @@ package wifi;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import rf.RF;
@@ -13,7 +16,7 @@ public class NSyncClock {
 	private static final String TAG = "NSyncClock";
 
 	// For keeping track of RTT times
-	private HashMap<Integer, TimerWrapper> mTimers;
+	private ConcurrentHashMap<Integer, TimerWrapper> mTimers;
 	
 	public static final long NANO_SEC_PER_MS = 1000000L;
 	
@@ -22,12 +25,20 @@ public class NSyncClock {
 	public static final long NANO_PER_MILLIS = 1000000L;
 	public static final long NANO_PER_MICRO = 1000L;
 	
+	// Define clock unit conversions
 	public static final long NANO_PER_CLOCK_UNIT = NANO_PER_MILLIS;
-	public static final long CLOCK_UNIT_PER_MILLIS = 1;
+	public static final long CLOCK_UNIT_PER_MILLIS = 
+										NANO_PER_CLOCK_UNIT / NANO_PER_MILLIS;
 	
+	// The time per slot in our clock units
+	public static final long A_SIFS_TIME = RF.aSIFSTime * CLOCK_UNIT_PER_MILLIS;
 	public static final long A_SLOT_TIME = RF.aSlotTime * CLOCK_UNIT_PER_MILLIS;
-	public static final long CW_MIN = RF.aCWmin * CLOCK_UNIT_PER_MILLIS;
-	public static final long CW_MAX = RF.aCWmax * CLOCK_UNIT_PER_MILLIS;
+	// contention window parameters in slots
+	public static final long CW_MIN = RF.aCWmin;
+	public static final long CW_MAX = RF.aCWmax;
+	
+	// Number of beacon transmits to average to calculate fudge
+	private static final int NUM_TRANSMITS_TO_AVG = 10;
 	
 	// Our round trip time estimation, the result of running RoundTripTimeTest
 	private static final long RTT_EST_MILLIS = 543; 
@@ -45,15 +56,28 @@ public class NSyncClock {
 	//-------------------------------------------------------------------------
 	
 	private final short mOurMAC;
-	// Just in case another thread tries to play with these
+	// Just in case another thread tries to play with these through setter
+	// methods or consumeBacon
 	private AtomicLong mBeaconInterval;
-	private AtomicLong mOffsetNano; // offset in nanoseconds
+	private AtomicLong mOffset; // offset in nanoseconds
+	
+	// Track beacon events
+	private long[] mTDiffArray;
+	private int mTDiffArraySize; // how many slots have been filled
+	private int mTDiffArrayIdx = 0; // the current index
+	// transmit fudge to fix our outgoing bacon. Yum! Yum!
+	private long mTransmitFudge = 0L; 
+	// Remember the last time we packaged up some bacon? It was great.
+	private long mLastBeaconEvent;
+
 	
 	public NSyncClock(short macDonalds) {
-		mTimers = new HashMap<Integer, TimerWrapper>();
+		mTimers = new ConcurrentHashMap<Integer, TimerWrapper>();
 		mOurMAC = macDonalds;
 		mBeaconInterval = new AtomicLong(-1L);
-		mOffsetNano = new AtomicLong(0L);
+		mOffset = new AtomicLong(0L);
+		mTDiffArray = new long[NUM_TRANSMITS_TO_AVG];
+		mTDiffArraySize = 0;
 	}
 	
 	/**
@@ -61,23 +85,7 @@ public class NSyncClock {
 	 * @return
 	 */
 	public long time() {
-		return nanoTime();
-	}
-	
-	/**
-	 * Mimicking the System.nanoTime() call but adds timer offset
-	 * @return
-	 */
-	public long nanoTime() {
-		return mOffsetNano.get() + System.nanoTime();
-	}
-	
-	/**
-	 * Mimicking the System.currentTimeMillis() call but adds timer offset
-	 * @return
-	 */
-	public long currentTimeMillis() {
-		return nanoTime() / NANO_PER_MILLIS;
+		return mOffset.get() + System.currentTimeMillis();
 	}
 	
 	public long getBeaconInterval() {
@@ -92,8 +100,12 @@ public class NSyncClock {
 		mBeaconInterval.set(clockUnits);
 	}
 	
+	/**
+	 * Generates a beacon packet
+	 * @return
+	 */
 	public Packet generateBeacon() {
-		long time = nanoTime();
+		long time = time();
 		byte[] data = ByteBuffer
 						.allocate(Long.SIZE / 8)
 						.putLong(time)
@@ -102,7 +114,7 @@ public class NSyncClock {
 				Packet.BEACON_MAC, 
 				mOurMAC, 
 				data,
-				data.length);
+				data.length, time());
 	}
 	
 	/**
@@ -111,8 +123,8 @@ public class NSyncClock {
 	 */
 	public void updateBeacon(Packet p) {
 		Log.i(TAG, "updating beacon packet");
-		// TODO is this time in microseconds? milliseconds? nanoseconds?
-		long time = nanoTime() / NANO_PER_MICRO;
+		mLastBeaconEvent = time();
+		long time = time() + mTransmitFudge;
 		byte[] data = ByteBuffer
 				.allocate(Long.SIZE / 8)
 				.putLong(time)
@@ -120,17 +132,50 @@ public class NSyncClock {
 		p.setData(data);
 	}
 	
+	public void onBeaconTransmit() {
+		long diff = time() -  mLastBeaconEvent;
+		// Store this diff, replacing old if array is full
+		mTDiffArray[mTDiffArrayIdx] = diff;
+		// Increment size if necessary
+		if(mTDiffArraySize < mTDiffArray.length)
+			mTDiffArraySize = mTDiffArraySize + 1;
+		// calc index for next time
+		mTDiffArrayIdx = (mTDiffArrayIdx + 1) % mTDiffArray.length;
+		
+		// Calculate the new average
+		double sum = 0L;
+		double numItems = mTDiffArraySize;
+		for(int i = 0; i < mTDiffArraySize; i++) {
+			sum +=mTDiffArray[i];
+		}
+		mTransmitFudge = (long) (sum / numItems);
+		Log.d(TAG, "New outgoing beacon fudge is " + mTransmitFudge);
+	}
+	
 	public void consumeBacon(Packet p) {
-		synchronized(mOffsetNano) {
-			long ourTime = time(); // capture as soon as possible
+		consumeBacon(p, time());
+	}
+	
+	public void consumeBacon(Packet p, long timeRecvd) {
+		synchronized(mOffset) {
 			if(p.isBeacon()) {
 				byte[] data = p.getData();
-				long time = ByteBuffer.wrap(data).getLong();
-				// TODO add estimated transfer time
-				long difference = time - ourTime;
+				long packetTime = ByteBuffer.wrap(data).getLong();
+				long difference = packetTime - timeRecvd;
+				
+				Log.d(TAG, "Recvd beacon has time: " + packetTime);
+				Log.d(TAG, "We have: " + timeRecvd);
+				Log.d(TAG, "Diff: " + difference);
+				
 				// If their time is ahead of ours, roll ours forward to match
 				if( difference > 0) {
-					mOffsetNano.set(mOffsetNano.get() + difference); 
+					long newOffset = mOffset.get() + difference;
+					mOffset.set(newOffset);
+					Log.d(TAG, "new offset: " + newOffset);
+				} else if ( difference == 0){
+					Log.d(TAG, "We're NSYNC! Heyoooo!");
+				} else {
+					Log.d(TAG, "Them fools stuck in the past.");
 				}
 			}
 		}
@@ -155,7 +200,7 @@ public class NSyncClock {
 	 * @param packetSeq
 	 */
 	public void logTransmitTime(int packetSeq) {
-		long time = currentTimeMillis();
+		long time = time();
 		mTimers.put(packetSeq, new TimerWrapper(time));
 		Log.d(TAG, "Logging " + packetSeq + " start time: " + time);
 	}
@@ -166,7 +211,7 @@ public class NSyncClock {
 	 * @return Time between transmission and recieve for the specified packet
 	 */
 	public long logRecvAckTime(int packetSeq) {
-		long time = currentTimeMillis();
+		long time = time();
 		TimerWrapper timer = mTimers.get(packetSeq);
 		timer.end = time;
 
@@ -198,6 +243,10 @@ public class NSyncClock {
 		return avgTime;
 	}
 
+	public long getLastBeaconEvent() {
+		return mLastBeaconEvent;
+	}
+	
 	//--------------------------------------------------------------------------
 	// REALLY REALLY IMPORTANT METHODS
 	//--------------------------------------------------------------------------

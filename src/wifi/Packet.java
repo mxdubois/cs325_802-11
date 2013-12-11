@@ -18,10 +18,8 @@ public class Packet implements Comparable<Packet>{
 	private static final String TAG = "Packet";
 	
 	// TODO wtf are correct values for these?
-	public static final long SIFS = RF.aSIFSTime * NSyncClock.NANO_PER_MILLIS;
-	public static final long PIFS = 2*SIFS;
-	public static final long DIFS = 4*SIFS;
-	public static final long EIFS = 8*SIFS;
+	public static final long SIFS = NSyncClock.A_SIFS_TIME;
+	public static final long DIFS = SIFS + 2*NSyncClock.A_SLOT_TIME;
 	
 	public static final short MAX_SEQ_NUM = 4095; // 12 bits of data: (2^12)-1
 	public static final int MAX_DATA_BYTES = 2038;
@@ -45,12 +43,15 @@ public class Packet implements Comparable<Packet>{
 	private int mPacketSize; // Total packet length
 
 	private boolean mPacketInitialized;
+
+	private long mTimeInstantiated;
 	
-	public Packet(int type, short dest, short src, byte[] data, int len) {
-		this(type, dest, src, data, len, (short) 0);
+	public Packet(int type, short dest, short src, byte[] data, int len, long timeInstantiated) {
+		this(type, dest, src, data, len, (short) 0, timeInstantiated);
 	}
 	
-	public Packet(int type, short dest, short src, byte[] data, int len, short seqNum) {
+	public Packet(int type, short dest, short src, byte[] data, int len, short seqNum, long timeInstantiated) {
+		mTimeInstantiated = timeInstantiated;
 		// If len exceeds the size of the data buffer, add the entire buffer
 		int dataSize = Math.min(len, data.length);
 
@@ -73,11 +74,12 @@ public class Packet implements Comparable<Packet>{
 	 * no error checking, it assumes argument constitutes a valid packet
 	 * @param packet
 	 */
-	private Packet(byte[] packet) {
+	private Packet(byte[] packet, long timeInstantiated) {
 		mPacketSize = packet.length;
 		//mPacket = ByteBuffer.allocate(mPacketSize).order(ByteOrder.BIG_ENDIAN);
 		mPacket = ByteBuffer.wrap(packet).order(ByteOrder.BIG_ENDIAN);
 		mPacketInitialized = true;
+		mTimeInstantiated = timeInstantiated;
 	}
 
 	private void buildHeader(int type, short dest, short src, short seqNum) {
@@ -190,7 +192,7 @@ public class Packet implements Comparable<Packet>{
 		if(getType() == CTRL_DATA_CODE) {
 			ifs = DIFS;
 		}
-		return (long) getType();
+		return ifs;
 	}
 	
 	public boolean isRetry() {
@@ -198,6 +200,10 @@ public class Packet implements Comparable<Packet>{
 		// Shift 4 bits right and remove any leading bits
 		int retry = (firstByte >> 4) & 0x1;
 		return retry == 1;
+	}
+	
+	public long getTimeInstantiated() {
+		return mTimeInstantiated;
 	}
 	
 	public short getSrcAddr() {
@@ -210,6 +216,10 @@ public class Packet implements Comparable<Packet>{
 	
 	public int getDataLen() {
 		return mPacketSize - HEADER_SIZE - CRC_SIZE;
+	}
+	
+	public int size() {
+		return mPacketSize;
 	}
 	
 	public short getSequenceNumber() {
@@ -275,12 +285,12 @@ public class Packet implements Comparable<Packet>{
 	 * @param packet The byte array to parse
 	 * @return The packet object, or null if packet is invalid
 	 */
-	public static Packet parse(byte[] packet) {
+	public static Packet parse(byte[] packet, long timeInstantiated) {
 		Packet newPacket;
 		if(packet.length < HEADER_SIZE + CRC_SIZE)
 			newPacket = null; // Packet is of insufficient length
 		else {
-			newPacket = new Packet(packet);
+			newPacket = new Packet(packet, timeInstantiated);
 			// Check packet validity (CRC), return null if packet is not valid
 			if(!newPacket.checkPacketValidity()) newPacket = null;
 		}
