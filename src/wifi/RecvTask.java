@@ -121,6 +121,7 @@ public class RecvTask implements Runnable {
 			// Queue packet for delivery
 			try {
 				mRecvData.put(dataPacket);
+				Log.d(TAG, "queued ack for sending");
 			} catch (InterruptedException e) {
 				Log.e(TAG, "Interrupted when blocking on the receive data queue");
 			}

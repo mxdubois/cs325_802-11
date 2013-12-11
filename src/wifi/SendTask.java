@@ -106,7 +106,11 @@ public class SendTask implements Runnable {
 						// ( remember, we have no idea how long we'll have 
 						// to wait for an open channel to send this sucker)
 						mPacket = mClock.generateBeacon();
-					} else {
+					} else if(mSendAckQueue.peek() != null) {
+						// Note that in this case, mPacket remains null
+						setState(WAITING_FOR_OPEN_CHANNEL);
+					} 
+					else {
 						// otherwise block on poll for no more than
 						// beaconInterval so that we don't miss the next
 						// opportunity to fry up some bacon
@@ -153,19 +157,16 @@ public class SendTask implements Runnable {
 				// acknowledgment, transmission of the ACK frame shall 
 				// commence after a SIFS period, without regard to the
 				// busy/idle state of the medium.
-				synchronized(mSendAckQueue) {
-					if(elapsed >=  Packet.SIFS && mSendAckQueue.size() > 0) {
-						if(mClock.time() % 50 > EPSILON) {
-							// busy wait until we hit an increment of 50 units
-							break;
-						}
-						Packet ack = mSendAckQueue.poll();
-						if(ack != null)	{
-							Log.d(TAG, "Sending ack.");
-							mRF.transmit(ack.getBytes());
-							setState(WAITING_FOR_OPEN_CHANNEL);
-						}
+				Packet ack = mSendAckQueue.peek();
+				if(elapsed >=  Packet.SIFS && ack != null) {
+					if(mClock.time() % 50 > EPSILON) {
+						// busy wait until we hit an increment of 50 units
+						break;
 					}
+					Log.d(TAG, "Sending ack.");
+					mRF.transmit(ack.getBytes());
+					mSendAckQueue.poll();
+					setState(WAITING_FOR_OPEN_CHANNEL);
 				}
 				
 				// Otherwise, no acks to send...

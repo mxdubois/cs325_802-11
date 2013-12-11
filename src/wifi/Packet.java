@@ -188,7 +188,7 @@ public class Packet implements Comparable<Packet>{
 		if(getType() == CTRL_DATA_CODE) {
 			ifs = DIFS;
 		}
-		return (long) getType();
+		return ifs;
 	}
 	
 	public boolean isRetry() {
