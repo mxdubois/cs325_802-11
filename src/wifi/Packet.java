@@ -212,6 +212,10 @@ public class Packet implements Comparable<Packet>{
 		return mPacketSize - HEADER_SIZE - CRC_SIZE;
 	}
 	
+	public int size() {
+		return mPacketSize;
+	}
+	
 	public short getSequenceNumber() {
 		byte highByte = mPacket.get(0);
 		byte lowByte = mPacket.get(1);

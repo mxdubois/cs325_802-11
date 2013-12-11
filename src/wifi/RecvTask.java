@@ -42,6 +42,7 @@ public class RecvTask implements Runnable {
 		Log.i(TAG, "RecvThread running");
 		while(true) {
 			byte[] recvTrans = mRF.receive();
+			long recvTime = mClock.time();
 			short packDest = Packet.parseDest(recvTrans);
 			Log.i(TAG, "RecvThread got a transmission for " + packDest);
 		   // Only consume beacons and data packets sent to this host
@@ -55,7 +56,7 @@ public class RecvTask implements Runnable {
 					if(type == Packet.CTRL_ACK_CODE) {
 						consumeAck(packet);
 					} else if(type == Packet.CTRL_BEACON_CODE) {
-						consumeBeacon(packet);
+						consumeBeacon(packet, recvTime);
 					} else if(type == Packet.CTRL_DATA_CODE) {
 						consumeData(packet);
 					}
@@ -74,9 +75,9 @@ public class RecvTask implements Runnable {
 		}
 	}
 	
-	private void consumeBeacon(Packet beaconPacket) {
+	private void consumeBeacon(Packet beaconPacket, long recvTime) {
 		Log.i(TAG, "Consuming B(E)ACON packet");
-		mClock.consumeBacon(beaconPacket);
+		mClock.consumeBacon(beaconPacket, recvTime);
 	}
 	
 	/**

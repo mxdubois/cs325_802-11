@@ -34,7 +34,6 @@ public class SendTask implements Runnable {
 	// Map of last seq nums by dest address
 	private HashMap<Short, Short> mLastSeqs; 
 	private long mLastEvent;
-	private long mLastBeaconEvent;
 	
 	// COUNTS
 	private static final int MAX_RETRIES = RF.dot11RetryLimit;
@@ -51,7 +50,10 @@ public class SendTask implements Runnable {
 	public static final long CW_MIN = NSyncClock.CW_MIN;
 	public static final long CW_MAX = NSyncClock.CW_MAX;
 	private long mCW = NSyncClock.CW_MIN;
+
 	private static final long A_SLOT_TIME = NSyncClock.A_SLOT_TIME;
+
+	private static final long EPSILON = 0;
 	
 	public SendTask(
 			RF rf,
@@ -75,21 +77,29 @@ public class SendTask implements Runnable {
 	public void run() {
 		boolean done = false;
 		while(!Thread.interrupted() && !done) {
-			
+			long elapsed = mClock.time() - mLastEvent;
 			switch(mState) {
 			
 			case WAITING_FOR_DATA:
 				try {
 					mPacket = null;
 					long beaconInterval = mClock.getBeaconInterval();
-					long beaconElapsed = mClock.time() - mLastBeaconEvent;
+					long beaconElapsed = 
+							mClock.time() - mClock.getLastBeaconEvent();
 					boolean isBaconTime = beaconElapsed >= beaconInterval;
 					// if it's time for bacon
 					if(beaconInterval > -1 && isBaconTime) {
+						// We generate a beacon packet here, but it's mostly
+						// just a dummy that we can channel through the usual
+						// sending logic. We update its time just before sending
+						// to get a more accurate time
+						// ( remember, we have no idea how long we'll have 
+						// to wait for an open channel to send this sucker)
 						mPacket = mClock.generateBeacon();
-						mLastBeaconEvent = mClock.time();
 					} else {
-						// otherwise block on poll for beaconInterval
+						// otherwise block on poll for no more than
+						// beaconInterval so that we don't miss the next
+						// opportunity to fry up some bacon
 						long nanoWait = mClock.getBeaconIntervalNano();
 						mPacket = mSendQueue.poll(nanoWait, 
 												  TimeUnit.NANOSECONDS);
@@ -128,11 +138,25 @@ public class SendTask implements Runnable {
 				break;
 			
 			case WAITING_PACKET_IFS:
-				long waitFor = mPacket.getIFS();
-				if(mRF.inUse()) {
-					setState(WAITING_FOR_OPEN_CHANNEL);
-					//TODO use mRf.getIdleTime() ?
-				} else if(mClock.nanoTime() - mLastEvent >= waitFor) {
+				long ifs = mPacket.getIFS();
+				long timeLeft = ifs - elapsed;
+				if(mRF.inUse() || mRF.getIdleTime() < elapsed) {
+					// Someone jumped on, determine how long we actually waited
+					//  this is "wasted time", but we can travel back in time
+					long wastedTime = elapsed - mRF.getIdleTime();
+					long stateChangeTime = mClock.time() - wastedTime;
+					setState(WAITING_FOR_OPEN_CHANNEL, stateChangeTime);
+					
+					// Else if waited long enough && within EPSILON of 50 units
+					// we might use an EPSILON if we didn't trust the OS to
+					// wake us exactly on a 50 unit increment.
+				} else if(timeLeft <= 0) {
+					long time = mClock.time();
+					if(time % 50 > EPSILON) {
+						// Busy wait until the next 50 unit boundary
+						break;
+					}
+					Log.d(TAG, "done waiting IFS at " + time);
 					setState(WAITING_BACKOFF);
 				} else {
 					try {
@@ -145,20 +169,51 @@ public class SendTask implements Runnable {
 				break;
 				
 			case WAITING_BACKOFF:
-				long elapsed = mClock.nanoTime() - mLastEvent;
-				if(mRF.inUse()) {
-					mBackoff = mBackoff - elapsed;
-					setState(WAITING_FOR_OPEN_CHANNEL);
-				} else if(elapsed >= mBackoff) {
+				timeLeft = mBackoff - elapsed;
+				if(mRF.inUse() || mRF.getIdleTime() < elapsed) {
+					// Someone jumped on, determine how long we actually waited
+					// before they got on, subtract that from backoff
+					// rest is "wasted time", but we can travel back in time
+					long wastedTime = elapsed - mRF.getIdleTime();
+					long stateChangeTime = mClock.time() - wastedTime;
+					mBackoff = mBackoff - (elapsed - wastedTime);
+					setState(WAITING_FOR_OPEN_CHANNEL, stateChangeTime);
+					
+					// Else if waited long enough && within EPSILON of 50 units
+					// we might use an EPSILON if we didn't trust the OS to
+					// wake us exactly on a 50 unit increment.
+				} else if(timeLeft <=0) {
+					long time = mClock.time();
+					if(time % 50 > EPSILON) {
+						// Busy wait until the next 50 unit boundary
+						break;
+					}
+					Log.d(TAG,"done waiting backoff at " + mClock.time());
 					if(mPacket.isBeacon()) {
 						// update time to the latest
 						mClock.updateBeacon(mPacket);
+						// Check to see if some jerkface jumped on our channel
+						if(mRF.inUse()) {
+							// mClock!!! You were too slow!!!
+							mBackoff = mClock.time() - mLastEvent;
+							setState(WAITING_FOR_OPEN_CHANNEL);
+						}
 					}
-					// TODO in theory some jerkface could jump on the channel while we're updating the beacon
-					// TODO handle problems with transmit
-					int status = transmit(mPacket);
+					
+					// Fire away!
+					int bytesSent = transmit(mPacket);
+					if(mPacket.isBeacon()) 
+						mClock.onBeaconTransmit();
 					mTryCount++;
-					if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
+					
+					if(bytesSent > mPacket.size()) {
+						// We take a semi-naive approach if the RF failed to
+						// send the whole packet. We treat it like a collision
+						// but since we know the packet didn't get out, 
+						// we can skip WAITIING_FOR_ACK, -- we won't get one.
+						prepareForRetry();
+						setState(WAITING_FOR_OPEN_CHANNEL);
+					} else if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
 						// Wait for an ack
 						setState(WAITING_FOR_ACK);
 					} else {
@@ -166,6 +221,7 @@ public class SendTask implements Runnable {
 						retirePacket();
 						setState(WAITING_FOR_DATA);
 					}
+					
 				} else {
 					try {
 						sleepyTime();
@@ -176,6 +232,12 @@ public class SendTask implements Runnable {
 				}
 				break;
 				
+			/* TODO 
+			 * optimize. seems like we could be waiting for an open channel
+			 * and waiting packet ifs while we wait for an ack
+			 * we just wouldn't send unless ackWaitTime has elapsed
+			 * it'd be more complicated though...
+			 */
 			case WAITING_FOR_ACK:
 				// If we're done with this packet
 				if(mTryCount >= MAX_TRY_COUNT || receivedAckFor(mPacket)) {
@@ -183,7 +245,6 @@ public class SendTask implements Runnable {
 						// we're done because we give up
 						Log.d(TAG, "Giving up on packet " + 
 								mPacket.getSequenceNumber());
-
 						mHostStatus.set(LinkLayer.TX_FAILED);
 					} else {
 						// success! we're done because we succeeded!!!
@@ -196,11 +257,10 @@ public class SendTask implements Runnable {
 					// Moving on
 					retirePacket();
 					setState(WAITING_FOR_DATA);
-				} else if(mClock.time() - mLastEvent >= mAckWait) {
+				} else if(elapsed >= mAckWait) {
 					// No ack, resend.
 					Log.d(TAG, "No ACK received. Collision has occured.");
-					mPacket.setRetry(true);
-					setBackoff(mTryCount, mPacket.getType());
+					prepareForRetry();
 					setState(WAITING_FOR_OPEN_CHANNEL);
 				} else {
 					// there's nothing to do yet, sleepytime
@@ -221,7 +281,12 @@ public class SendTask implements Runnable {
 	}
 	
 	private void setState(int newState) {
-		mLastEvent = mClock.time();
+		setState(newState, mClock.time());
+	}
+	
+	private void setState(int newState, long time) {
+		// align frame start to 50 unit increment
+		mLastEvent = time + (time % 50); 
 		mState = newState;
 		switch(newState) {
 		case WAITING_FOR_DATA :
@@ -246,6 +311,11 @@ public class SendTask implements Runnable {
 	
 	private void retirePacket() {
 		mPacket = null;
+	}
+	
+	private void prepareForRetry() {
+		mPacket.setRetry(true);
+		setBackoff(mTryCount, mPacket.getType());
 	}
 	
 	private boolean receivedAckFor(Packet p) {
