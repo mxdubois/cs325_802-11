@@ -28,6 +28,9 @@ public class NSyncClock {
 	public static final long A_SLOT_TIME = RF.aSlotTime * CLOCK_UNIT_PER_MILLIS;
 	public static final long CW_MIN = RF.aCWmin * CLOCK_UNIT_PER_MILLIS;
 	public static final long CW_MAX = RF.aCWmax * CLOCK_UNIT_PER_MILLIS;
+	
+	// Our round trip time estimation, the result of running RoundTripTimeTest
+	private static final long RTT_EST_MILLIS = 543; 
 		
 	/**
 	 * Returns the slot length in nano seconds
@@ -135,6 +138,15 @@ public class NSyncClock {
 	
 	public long ackWaitEst() {
 		// TODO implement meeeeee!
+		return RTT_EST_MILLIS;
+	}
+	
+	/**
+	 * Returns an excessively large RTT estimation to avoid unnecessary resends
+	 * during an RTT test
+	 * @return
+	 */
+	public long ackWaitRttTest() {
 		return 5000L * NANO_PER_MILLIS;
 	}
 	

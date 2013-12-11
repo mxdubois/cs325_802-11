@@ -65,8 +65,12 @@ public class SendTask implements Runnable {
 		mRecvAckQueue = recvAckQueue;
 		mClock = nSyncClock;
 		mHostStatus = hostStatus;
-		mAckWait = mClock.ackWaitEst();
 		mLastSeqs = new HashMap<Short,Short>();
+		if(LinkLayer.layerMode == LinkLayer.MODE_ROUND_TRIP_TEST)
+			mAckWait = mClock.ackWaitRttTest();
+		else
+			mAckWait = mClock.ackWaitEst();
+		
 		Log.d(TAG, TAG + " initialized!");
 		setState(WAITING_FOR_DATA);
 	}

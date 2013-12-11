@@ -8,7 +8,7 @@ public class RoundTripTimeTest {
 
 	// Destination MAC for RTT tests
 	public static final short RTT_TEST_DEST_MAC = 602;
-	// Origin MAC for RTT tests (this machine)
+	// Origin MAC for RTT tests (testing machine)
 	private static final short RTT_ORIGIN_MAC = 601;
 	// Number of packets to send for RTT tests
 	public static final int NUM_RTT_PACKETS = 5;
