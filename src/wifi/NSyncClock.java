@@ -182,8 +182,7 @@ public class NSyncClock {
 	}
 	
 	public long ackWaitEst() {
-		// TODO implement meeeeee!
-		return RTT_EST_MILLIS;
+		return (RTT_EST_MILLIS + A_SLOT_TIME) / CLOCK_UNIT_PER_MILLIS;
 	}
 	
 	/**
@@ -192,7 +191,7 @@ public class NSyncClock {
 	 * @return
 	 */
 	public long ackWaitRttTest() {
-		return 5000L * NANO_PER_MILLIS;
+		return 5000L / CLOCK_UNIT_PER_MILLIS;
 	}
 	
 	/**
