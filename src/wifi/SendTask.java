@@ -467,7 +467,6 @@ public class SendTask implements Runnable {
 					Log.d(TAG, "Sending ack.");
 					mRF.transmit(ack.getBytes());
 					mSendAckQueue.poll();
-					setState(WAITING_FOR_OPEN_CHANNEL);
 				}
 			}
 		}
