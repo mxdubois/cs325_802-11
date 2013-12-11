@@ -119,11 +119,7 @@ public class SendTask implements Runnable {
 						// ( remember, we have no idea how long we'll have 
 						// to wait for an open channel to send this sucker)
 						mPacket = mClock.generateBeacon();
-					} else if(mSendAckQueue.peek() != null) {
-						// Note that in this case, mPacket remains null
-						setState(WAITING_FOR_OPEN_CHANNEL);
-					} 
-					else {
+					} else {
 						// otherwise block on poll for no more than
 						// beaconInterval so that we don't miss the next
 						// opportunity to fry up some bacon
