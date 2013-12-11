@@ -96,7 +96,7 @@ public class RecvTask implements Runnable {
 		
 		Short lastSeqNum = mLastSeqs.get(dataPacket.getSrcAddr());
 		if(lastSeqNum == null)
-			lastSeqNum = 0;
+			lastSeqNum = -1;
 		
 		short packetSeqNum = dataPacket.getSequenceNumber();
 		short packetSrcAddr = dataPacket.getSrcAddr();
