@@ -12,7 +12,6 @@ import rf.RF;
 
 public class NSyncClock {
 	
-	private static final boolean DEBUG = LinkLayer.debugLevel > 0;
 	private static final String TAG = "NSyncClock";
 
 	// For keeping track of RTT times
@@ -74,6 +73,10 @@ public class NSyncClock {
 	private long mLastBeaconEvent;
 
 	
+	/**
+	 * Grace this world with NSync...Clock.
+	 * @param macDonalds
+	 */
 	public NSyncClock(short macDonalds) {
 		mTimers = new ConcurrentHashMap<Integer, TimerWrapper>();
 		mOurMAC = macDonalds;
@@ -91,14 +94,26 @@ public class NSyncClock {
 		return mOffset.get() + System.currentTimeMillis();
 	}
 	
+	/**
+	 * Get the beacon interval in clock units.
+	 * @return
+	 */
 	public long getBeaconInterval() {
 		return mBeaconInterval.get();
 	}
 	
+	/**
+	 * Get the beacon interval in nanoseconds
+	 * @return
+	 */
 	public long getBeaconIntervalNano() {
 		return mBeaconInterval.get() * NANO_PER_CLOCK_UNIT;
 	}
 	
+	/**
+	 * Set the beacon interval in clock units
+	 * @param clockUnits
+	 */
 	public void setBeaconInterval(long clockUnits) {
 		mBeaconInterval.set(clockUnits * MILLIS_PER_SEC / CLOCK_UNIT_PER_MILLIS);
 	}
@@ -155,6 +170,11 @@ public class NSyncClock {
 		Log.d(TAG, "New outgoing beacon fudge is " + mTransmitFudge);
 	}
 
+	/**
+	 * Consume a bacon packet to update the time offset.
+	 * @param p - a beacon packet
+	 * @param timeRecvd - the time the packet was received
+	 */
 	public void consumeBacon(Packet p, long timeRecvd) {
 		synchronized(mOffset) {
 			if(p.isBeacon()) {
@@ -180,6 +200,10 @@ public class NSyncClock {
 		}
 	}
 	
+	/**
+	 * Returns the ack wait time estimate in clock units
+	 * @return
+	 */
 	public long ackWaitEst() {
 		return (RTT_EST_MILLIS + A_SLOT_TIME) / CLOCK_UNIT_PER_MILLIS;
 	}
@@ -241,6 +265,10 @@ public class NSyncClock {
 		return avgTime;
 	}
 
+	/**
+	 * Returns the timestamp in clock units of the last outgoing beacon transmit
+	 * @return
+	 */
 	public long getLastBeaconEvent() {
 		return mLastBeaconEvent;
 	}
@@ -249,6 +277,9 @@ public class NSyncClock {
 	// REALLY REALLY IMPORTANT METHODS
 	//--------------------------------------------------------------------------
 	
+	/**
+	 * Self explanatory.
+	 */
 	public static void dance() {
 		int randInt = Utilities.random.nextInt(3);
 		switch(randInt) {

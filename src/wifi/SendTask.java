@@ -62,6 +62,16 @@ public class SendTask implements Runnable {
 
 	private static final long EPSILON = 2;
 	
+	/**
+	 * Creates a SendTask capable of transmitting packets according to 802.11~
+	 * @param rf - The RF physical layer upon which we should transmit
+	 * @param nSyncClock - the synced clock
+	 * @param hostStatus - the atomic integer linkLayer status
+	 * @param sendQueue - a queue from which we should poll data packets
+	 * @param sendAckQueue - a queue from which we should poll outgoing acks
+	 * @param recvAckQueue - a queue from which we should poll recvd acks
+	 * @param mac - the mac address of this machine
+	 */
 	public SendTask(
 			RF rf,
 			NSyncClock nSyncClock,
@@ -84,7 +94,9 @@ public class SendTask implements Runnable {
 			mAckWait = mClock.ackWaitEst();
 		
 		Log.d(TAG, TAG + " initialized!");
-		mRandom = new Random(mac);
+		// This is the only reason we need the mac
+		// TODO We could just ask for a Random to be passed in
+		mRandom = new Random(mac); 
 		setState(WAITING_FOR_DATA);
 	}
 	
@@ -309,10 +321,19 @@ public class SendTask implements Runnable {
 		Log.e(TAG, "Interrupted!");
 	}
 	
+	/**
+	 * Sets the state and logs the state change event with current clock time
+	 * @param newState
+	 */
 	private void setState(int newState) {
 		setState(newState, mClock.time());
 	}
 	
+	/**
+	 * Sets the state and logs state change with specified time
+	 * @param newState
+	 * @param time
+	 */
 	private void setState(int newState, long time) {
 		// align frame start to 50 unit increment
 		mLastEvent = time + (time % 50); 
@@ -337,15 +358,26 @@ public class SendTask implements Runnable {
 		}
 	}
 	
+	/**
+	 * Retires a packet from transmission candidacy
+	 */
 	private void retirePacket() {
 		mPacket = null;
 	}
 	
+	/**
+	 * Prepares packet/vars for retry transmission
+	 */
 	private void prepareForRetry() {
 		mPacket.setRetry(true);
 		setBackoff(mTryCount, mPacket.getType());
 	}
 	
+	/**
+	 * Have we received an ack for this packet?
+	 * @param p - the outgoing packet for which we should have received ack
+	 * @return - true if we've received an ack, false if not
+	 */
 	private boolean receivedAckFor(Packet p) {
 		boolean recvdAck = false;
 		// synchronized block b/c otherwise other threads might screw us up
@@ -391,6 +423,11 @@ public class SendTask implements Runnable {
 		}
 	}
 	
+	/**
+	 * Transmits a packet
+	 * @param p - Packet to transmit
+	 * @return
+	 */
 	private int transmit(Packet p) {
 		Log.i(TAG, "Transmitting packet type " + p.getType()
 				+ ", seq num " + p.getSequenceNumber() 
@@ -406,6 +443,10 @@ public class SendTask implements Runnable {
 		mSlotSelectionPolicy = policy;
 	}
 	
+	/**
+	 * Get the slot selection policy
+	 * @return
+	 */
 	protected int getSlotSelectionPolicy() {
 		return mSlotSelectionPolicy;
 	}
@@ -415,8 +456,8 @@ public class SendTask implements Runnable {
 	 * @throws InterruptedException if thread is interrupted.
 	 */
 	protected void sleepyTime() throws InterruptedException {
-//		int totalNanoWait = (int) (NSyncClock.getSlotTimeNano() / 10);
-//		sleepyTime(totalNanoWait);
+		int totalNanoWait = (int) (NSyncClock.getSlotTimeNano() / 10);
+		sleepyTime(totalNanoWait);
 	}
 	
 	/**
@@ -450,7 +491,9 @@ public class SendTask implements Runnable {
 		return curSeqNum;
 	}
 	
-	
+	/**
+	 * Sends outgoing acks in ack queue if SIFS has expired since they were born
+	 */
 	private void processAckQueue() {
 		Packet ack = mSendAckQueue.peek();
 		if(ack != null) {

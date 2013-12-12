@@ -66,11 +66,7 @@ public class LinkLayer implements Dot11Interface {
 	private AtomicInteger mStatus;
 
 
-	// STATUS CODES TO IMPLEMENT
-	// TODO UNSPECIFIED_ERRORs
 	// TODO RF_INIT_FAILED
-	// TODO BAD_MAC_ADDRESS ??
-	// TODO INSUFFICIENT_BUFFER_SPACE
 
 	/**
 	 * Constructor takes a MAC address and the PrintWriter to which our output will
@@ -98,8 +94,15 @@ public class LinkLayer implements Dot11Interface {
 
 		mStatus = new AtomicInteger();
 		this.mMac = ourMAC;
-		// TODO check if RF init failed?
-		mRF = new RF(null, null);
+		// attempt to init RF and check if init fails
+		try {
+			mRF = new RF(null, null);
+		} catch (Exception e) {
+			Log.e(TAG, e.getMessage());
+			setStatus(RF_INIT_FAILED);
+		}
+		if(mRF == null)
+			setStatus(RF_INIT_FAILED);
 
 		mRecvData = new ArrayBlockingQueue<Packet>(RECV_DATA_BUFFER_SIZE);
 		mSendAckQueue = new ArrayBlockingQueue<Packet>(SEND_ACK_BUFFER_SIZE);
@@ -137,8 +140,6 @@ public class LinkLayer implements Dot11Interface {
 		}
 	}
 
-	// TODO do we need an init method?
-
 	/**
 	 * Send method takes a destination, a buffer (array) of data, and the number
 	 * of bytes to send.  See docs for full description.
@@ -163,10 +164,9 @@ public class LinkLayer implements Dot11Interface {
 		}
 
 		// Don't queue more than MAX_OUT_DATA_PACKETS
-		if(mSendQueue.size() > MAX_OUT_DATA_PACKETS) {		
-			Log.e(TAG, MAX_OUT_DATA_PACKETS + 
-					" data packets already queued. Ignoring a new packet");
-			return 0;
+		if(mSendQueue.size() > MAX_OUT_DATA_PACKETS) {
+			setStatus(INSUFFICIENT_BUFFER_SPACE);
+			return -1;
 		}
 
 		Log.d(TAG,"Queueing "+len+" bytes to "+dest);
@@ -279,6 +279,11 @@ public class LinkLayer implements Dot11Interface {
 
 	// PRIVATE METHODS
 	//------------------
+	
+	/**
+	 * Sets the status code and prints a message.
+	 * @param code - the integer code, see docs for full description
+	 */
 	private void setStatus(int code) {
 		mStatus.set(code);
 		if(debugLevel > 0) {
