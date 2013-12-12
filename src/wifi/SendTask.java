@@ -170,9 +170,6 @@ public class SendTask implements Runnable {
 					// Someone jumped on, determine how long we actually waited
 					//  this is "wasted time", but we can travel back in time
 					setState(WAITING_FOR_OPEN_CHANNEL);
-//					long wastedTime = elapsed - mRF.getIdleTime();
-//					long stateChangeTime = mClock.time() - wastedTime;
-//					setState(WAITING_FOR_OPEN_CHANNEL, stateChangeTime);
 					
 				} else if(timeLeft <= 0) {
 					long time = mClock.time();
@@ -201,10 +198,6 @@ public class SendTask implements Runnable {
 					// before they got on, subtract that from backoff
 					// rest is "wasted time", but we can travel back in time
 					setState(WAITING_FOR_OPEN_CHANNEL);
-//					long wastedTime = elapsed - mRF.getIdleTime();
-//					long stateChangeTime = mClock.time() - wastedTime;
-//					mBackoff = mBackoff - (elapsed - wastedTime);
-//					setState(WAITING_FOR_OPEN_CHANNEL, stateChangeTime);
 					
 					// Else if waited long enough && within EPSILON of 50 units
 					// we might use an EPSILON if we didn't trust the OS to

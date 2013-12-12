@@ -40,8 +40,11 @@ public class NSyncClock {
 	// Number of beacon transmits to average to calculate fudge
 	private static final int NUM_TRANSMITS_TO_AVG = 10;
 	
-	// Our round trip time estimation, the result of running RoundTripTimeTest
-	private static final long RTT_EST_MILLIS = 543; 
+	// Our round trip time estimation. This is the result of running 
+	// RoundTripTimeTest between a client running on a mediocre laptop and a 
+	// client running in a VM on that laptop, on the medicore PS-CampusAccess 
+	// wireless network
+	private static final long RTT_EST_MILLIS = 646; 
 		
 	/**
 	 * Returns the slot length in nano seconds
@@ -151,11 +154,7 @@ public class NSyncClock {
 		mTransmitFudge = (long) (sum / numItems);
 		Log.d(TAG, "New outgoing beacon fudge is " + mTransmitFudge);
 	}
-	
-	public void consumeBacon(Packet p) {
-		consumeBacon(p, time());
-	}
-	
+
 	public void consumeBacon(Packet p, long timeRecvd) {
 		synchronized(mOffset) {
 			if(p.isBeacon()) {

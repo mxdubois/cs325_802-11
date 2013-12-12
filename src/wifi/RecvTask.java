@@ -45,12 +45,13 @@ public class RecvTask implements Runnable {
 			long recvTime = mClock.time();
 			short packDest = Packet.parseDest(recvTrans);
 			Log.i(TAG, "RecvThread got a transmission for " + packDest);
-		   // Only consume beacons and data packets sent to this host
+		   // Consume ACK and data packets that were sent to this host, and
+			// beacons specified by their universal address
 			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) {
 				Packet packet = Packet.parse(recvTrans, mClock.time());
 				// Packet is null if not valid (CRC's didn't match)
 				if(packet == null)
-					Log.i(TAG, "Throwing out a corrupted packet. \n ");
+					Log.i(TAG, "Throwing out a corrupted packet");
 				else {
 					int type = packet.getType();
 					if(type == Packet.CTRL_ACK_CODE) {

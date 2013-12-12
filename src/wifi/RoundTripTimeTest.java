@@ -11,7 +11,7 @@ public class RoundTripTimeTest {
 	// Origin MAC for RTT tests (testing machine)
 	private static final short RTT_ORIGIN_MAC = 601;
 	// Number of packets to send for RTT tests
-	public static final int NUM_RTT_PACKETS = 5;
+	public static final int NUM_RTT_PACKETS = 25;
 
 	public static void main(String[] args) {
 		// All we need to do is instantiate the link layer in the correct mode.
