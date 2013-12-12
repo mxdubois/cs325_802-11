@@ -60,7 +60,7 @@ public class SendTask implements Runnable {
 
 	private static final long A_SLOT_TIME = NSyncClock.A_SLOT_TIME;
 
-	private static final long EPSILON = 0;
+	private static final long EPSILON = 2;
 	
 	public SendTask(
 			RF rf,
@@ -325,8 +325,8 @@ public class SendTask implements Runnable {
 			Log.d(TAG, "Waiting for open channel. Try count: " + mTryCount);
 			break;
 		case WAITING_PACKET_IFS:
-			long p = mPacket.getPriority();
-			Log.d(TAG, "Waiting packet priority: " + p);
+//			long p = mPacket.getPriority();
+			Log.d(TAG, "Waiting packet priority: " + mPacket.getIFS());
 			break;
 		case WAITING_BACKOFF:
 			Log.d(TAG, "Waiting backoff: " + mBackoff);
@@ -415,8 +415,8 @@ public class SendTask implements Runnable {
 	 * @throws InterruptedException if thread is interrupted.
 	 */
 	protected void sleepyTime() throws InterruptedException {
-		int totalNanoWait = (int) (NSyncClock.getSlotTimeNano() / 10);
-		sleepyTime(totalNanoWait);
+//		int totalNanoWait = (int) (NSyncClock.getSlotTimeNano() / 10);
+//		sleepyTime(totalNanoWait);
 	}
 	
 	/**

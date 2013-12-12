@@ -20,6 +20,7 @@ public class Packet implements Comparable<Packet>{
 	// TODO wtf are correct values for these?
 	public static final long SIFS = NSyncClock.A_SIFS_TIME;
 	public static final long DIFS = SIFS + 2*NSyncClock.A_SLOT_TIME;
+	public static final long PIFS = SIFS + NSyncClock.A_SLOT_TIME;
 	
 	public static final short MAX_SEQ_NUM = 4095; // 12 bits of data: (2^12)-1
 	public static final int MAX_DATA_BYTES = 2038;
@@ -188,11 +189,16 @@ public class Packet implements Comparable<Packet>{
 	// type (and thus packet class) or not. i.e. is it dependent on factors
 	// other than the packet type? I'm esp curious about spec for EIFS here.
 	public long getIFS() {
-		long ifs = SIFS; // Default to ACK IFS
-		if(getType() == CTRL_DATA_CODE) {
-			ifs = DIFS;
+		switch(getType()) {
+			case CTRL_BEACON_CODE:
+				return PIFS;
+			case CTRL_ACK_CODE:
+				return SIFS;
+			case CTRL_DATA_CODE:
+				return DIFS;
+			default:
+				return DIFS;
 		}
-		return ifs;
 	}
 	
 	public boolean isRetry() {

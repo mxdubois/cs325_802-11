@@ -44,7 +44,7 @@ public class RecvTask implements Runnable {
 			byte[] recvTrans = mRF.receive();
 			long recvTime = mClock.time();
 			short packDest = Packet.parseDest(recvTrans);
-			Log.i(TAG, "RecvThread got a transmission for " + packDest);
+			Log.d(TAG, "RecvThread got a transmission for " + packDest);
 		   // Consume ACK and data packets that were sent to this host, and
 			// beacons specified by their universal address
 			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) {
@@ -136,7 +136,6 @@ public class RecvTask implements Runnable {
 			mLastSeqs.put(packetSrcAddr, nextSeqNum);
 		}
 			
-		// TODO do we ACK duplicate data?
 		try {
 			// Prepare and queue ACK
 			Packet ack = new Packet(Packet.CTRL_ACK_CODE, packetSrcAddr, 

@@ -5,6 +5,8 @@ package wifi;
  * @author Nathan P
  */
 public class RoundTripTimeTest {	
+	
+	private static final String TAG = "RoundTripTimeTest";
 
 	// Destination MAC for RTT tests
 	public static final short RTT_TEST_DEST_MAC = 602;
