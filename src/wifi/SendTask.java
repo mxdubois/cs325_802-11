@@ -11,6 +11,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import rf.RF;
 
+/**
+ * An infinitely looping task that transmits queued packets over the given
+ * RF physical layer according to the ground-breaking 802.11~ spec.
+ * @author Michael DuBois & Nathan Pastor
+ *
+ */
 public class SendTask implements Runnable {
 	
 	private static final String TAG = "SendTask";

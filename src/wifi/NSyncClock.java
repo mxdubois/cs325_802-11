@@ -10,6 +10,18 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import rf.RF;
 
+/**
+ * A clock that maintains a time offset to syncronize this client's time with
+ * the times broadcast by other clients on the network.
+ * 
+ * Why does this clock work so well? Quite simply, because it has all the 
+ * rhythmic mastery of the N*S*Y*N*C troupe baked into it's byte code at 
+ * compile time.  The NSyncClock represents the whole troupe -- bleached hair, 
+ * jean-jackets, it's all right here, in the code.
+ * 
+ * @author Michael DuBois & Nathan Pastor
+ *
+ */
 public class NSyncClock {
 	
 	private static final String TAG = "NSyncClock";
