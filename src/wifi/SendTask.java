@@ -464,9 +464,15 @@ public class SendTask implements Runnable {
 			long ackElapsed = mClock.time() - ack.getTimeInstantiated();
 			if(ackElapsed >=  Packet.SIFS) {
 				if(mClock.time() % 50 <= EPSILON) {
-					Log.d(TAG, "Sending ack.");
+					Log.d(TAG, "Ack queue size " + mSendAckQueue.size());
+					Log.d(TAG, "Sending ack, seq num " + ack.getSequenceNumber());
 					mRF.transmit(ack.getBytes());
-					mSendAckQueue.poll();
+					try {
+						mSendAckQueue.take();
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
 				}
 			}
 		}

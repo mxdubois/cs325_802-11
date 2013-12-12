@@ -139,8 +139,9 @@ public class RecvTask implements Runnable {
 		try {
 			// Prepare and queue ACK
 			Packet ack = new Packet(Packet.CTRL_ACK_CODE, packetSrcAddr, 
-					mHostAddr, new byte[0], 0, packetSeqNum);
+					mHostAddr, new byte[0], 0, packetSeqNum, mClock.time());
 			mSendAckQueue.put(ack);
+			Log.d(TAG, "Recvd data, queueing ack seq num " + packetSeqNum);
 		} catch (InterruptedException e) {
 			Log.e(TAG, "RecvTask interrupted when blocking on the send queue");
 		}
