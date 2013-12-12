@@ -23,7 +23,7 @@ public class NSyncClock {
 	public static final short BEACON_ADDR = (short) 0xFFFF;
 	
 	public static final long NANO_PER_MILLIS = 1000000L;
-	public static final long NANO_PER_MICRO = 1000L;
+	public static final long MILLIS_PER_SEC = 1000L;
 	
 	// Define clock unit conversions
 	public static final long NANO_PER_CLOCK_UNIT = NANO_PER_MILLIS;
@@ -100,7 +100,7 @@ public class NSyncClock {
 	}
 	
 	public void setBeaconInterval(long clockUnits) {
-		mBeaconInterval.set(clockUnits);
+		mBeaconInterval.set(clockUnits * MILLIS_PER_SEC / CLOCK_UNIT_PER_MILLIS);
 	}
 	
 	/**
