@@ -31,8 +31,6 @@ public class NSyncClock {
 	
 	public static final long NANO_SEC_PER_MS = 1000000L;
 	
-	public static final short BEACON_ADDR = (short) 0xFFFF;
-	
 	public static final long NANO_PER_MILLIS = 1000000L;
 	public static final long MILLIS_PER_SEC = 1000L;
 	

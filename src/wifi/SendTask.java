@@ -470,10 +470,10 @@ public class SendTask implements Runnable {
 	 */
 	private Short getNextSeqNum(short destAddr) {
 		Short curSeqNum = mLastSeqs.get(destAddr);
-		if(curSeqNum == null || curSeqNum + 1 > Packet.MAX_SEQ_NUM) {
+		if(curSeqNum == null || curSeqNum  == Packet.MAX_SEQ_NUM) {
 			// We have never sent to this address, or next seq num exceeds max
 			curSeqNum = 0;
-			mLastSeqs.put(destAddr, (short) 0);
+			mLastSeqs.put(destAddr, curSeqNum);
 		} else {
 			mLastSeqs.put(destAddr, ++curSeqNum);
 		}

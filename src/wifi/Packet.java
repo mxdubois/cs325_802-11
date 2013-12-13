@@ -19,7 +19,7 @@ public class Packet {
 	
 	public static final short MAX_SEQ_NUM = 4095; // 12 bits of data: (2^12)-1
 	public static final int MAX_DATA_BYTES = 2038;
-	public static final short BEACON_MAC = (short)(Math.pow(2,16)-1);
+	public static final short BEACON_MAC = (short)0xFFFF;
 	
 	// Packet type codes
 	public static final int CTRL_DATA_CODE = 0;

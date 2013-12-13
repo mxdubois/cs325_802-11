@@ -58,7 +58,7 @@ public class RecvTask implements Runnable {
 			Log.d(TAG, "RecvThread got a transmission for " + packDest);
 		   // Consume ACK and data packets that were sent to this host, and
 			// beacons specified by their universal address
-			if(packDest == mHostAddr || packDest == NSyncClock.BEACON_ADDR) {
+			if(packDest == mHostAddr || packDest == Packet.BEACON_MAC) {
 				Packet packet = Packet.parse(recvTrans, mClock.time());
 				// Packet is null if not valid (CRC's didn't match)
 				if(packet == null)
