@@ -51,7 +51,7 @@ public class LinkLayer implements Dot11Interface {
 	private BlockingQueue<Packet> mRecvData;
 	private BlockingQueue<Packet> mRecvAck;
 	private BlockingQueue<Packet> mSendAckQueue;
-	private PriorityBlockingQueue<Packet> mSendQueue;
+	private BlockingQueue<Packet> mSendDataQueue;
 	
 
 	private Thread mRecvThread;
@@ -107,7 +107,7 @@ public class LinkLayer implements Dot11Interface {
 		mRecvData = new ArrayBlockingQueue<Packet>(RECV_DATA_BUFFER_SIZE);
 		mSendAckQueue = new ArrayBlockingQueue<Packet>(SEND_ACK_BUFFER_SIZE);
 		mRecvAck = new ArrayBlockingQueue<Packet>(RECV_ACK_BUFFER_SIZE);
-		mSendQueue = new PriorityBlockingQueue<Packet>();
+		mSendDataQueue = new PriorityBlockingQueue<Packet>();
 
 		mClock = new NSyncClock(ourMAC);
 
@@ -123,7 +123,7 @@ public class LinkLayer implements Dot11Interface {
 		mSendTask = new SendTask(mRF, 
 								mClock, 
 								mStatus, 
-								mSendQueue, 
+								mSendDataQueue, 
 								mSendAckQueue, 
 								mRecvAck, 
 								ourMAC);
@@ -164,7 +164,7 @@ public class LinkLayer implements Dot11Interface {
 		}
 
 		// Don't queue more than MAX_OUT_DATA_PACKETS
-		if(mSendQueue.size() > MAX_OUT_DATA_PACKETS) {
+		if(mSendDataQueue.size() > MAX_OUT_DATA_PACKETS) {
 			setStatus(INSUFFICIENT_BUFFER_SPACE);
 			return -1;
 		}
@@ -190,7 +190,7 @@ public class LinkLayer implements Dot11Interface {
 										len, 
 										mClock.time());
 			// Queue it for sending
-			mSendQueue.offer(packet);
+			mSendDataQueue.offer(packet);
 			queued = queued + toQueue;
 		}
 		return queued;
@@ -335,14 +335,14 @@ public class LinkLayer implements Dot11Interface {
 			// Wait until there's room in the queue. Sleeping on this thread
 			// shouldn't cause any problems - if we're in RTT mode there won't be
 			// any other functionality to block
-			while(mSendQueue.size() >= MAX_OUT_DATA_PACKETS) {
+			while(mSendDataQueue.size() >= MAX_OUT_DATA_PACKETS) {
 				try {
 					Thread.sleep(100);
 				} catch (InterruptedException e) {
 					Log.e(TAG, e.getMessage());
 				}
 			}
-			mSendQueue.offer(dataPacket);
+			mSendDataQueue.offer(dataPacket);
 		}
 	}
 }

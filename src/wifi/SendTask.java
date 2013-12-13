@@ -1,10 +1,8 @@
 package wifi;
 
 import java.util.HashMap;
-import java.util.Queue;
 import java.util.Random;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,12 +26,14 @@ public class SendTask implements Runnable {
 	private static final int WAITING_PACKET_IFS = 3;
 	private static final int WAITING_BACKOFF = 4;
 	private static final int WAITING_FOR_ACK = 5;
-	private static final int WAITING_SIFS = 6;
 
 	// ESSENTIALS
 	private RF mRF;
-	private PriorityBlockingQueue<Packet> mSendQueue;
+	private BlockingQueue<Packet> mSendDataQueue;
 	private BlockingQueue<Packet> mRecvAckQueue;
+
+	private BlockingQueue<Packet> mSendAckQueue;
+
 	private NSyncClock mClock;
 	private AtomicInteger mHostStatus;
 	private Random mRandom;
@@ -61,9 +61,7 @@ public class SendTask implements Runnable {
 	public static final long CW_MIN = NSyncClock.CW_MIN;
 	public static final long CW_MAX = NSyncClock.CW_MAX;
 	private long mCW = NSyncClock.CW_MIN;
-
-	private BlockingQueue<Packet> mSendAckQueue;
-
+	
 	private static final long A_SLOT_TIME = NSyncClock.A_SLOT_TIME;
 
 	private static final long EPSILON = 2;
@@ -82,13 +80,13 @@ public class SendTask implements Runnable {
 			RF rf,
 			NSyncClock nSyncClock,
 			AtomicInteger hostStatus,
-			PriorityBlockingQueue<Packet> sendQueue, 
+			BlockingQueue<Packet> sendDataQueue, 
 			BlockingQueue<Packet> sendAckQueue,
 			BlockingQueue<Packet> recvAckQueue,
 			short mac) 
 	{		
 		mRF = rf;
-		mSendQueue = sendQueue;
+		mSendDataQueue = sendDataQueue;
 		mSendAckQueue = sendAckQueue;
 		mRecvAckQueue = recvAckQueue;
 		mClock = nSyncClock;
@@ -121,6 +119,7 @@ public class SendTask implements Runnable {
 			long elapsed = mClock.time() - mLastEvent;
 			switch(mState) {
 			
+			// Our big switch statement of task states
 			case WAITING_FOR_DATA:
 				try {
 					mPacket = null;
@@ -142,17 +141,15 @@ public class SendTask implements Runnable {
 						// beaconInterval so that we don't miss the next
 						// opportunity to fry up some bacon
 						long nanoWait = mClock.getBeaconIntervalNano();
-						mPacket = mSendQueue.poll(nanoWait, 
-												  TimeUnit.NANOSECONDS);
+						mPacket = mSendDataQueue.poll(nanoWait, TimeUnit.NANOSECONDS);
 					}
 					
 					// If we got a packet either way
 					if(mPacket != null) {
-						// Only set seq number for data
-						// ACK sequence numbers are already set by the RecvTask
+						// Only set sequence number for data, ACK sequence numbers 
+						// are already set by the RecvTask
 						if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
-							Short nextSeq = 
-									getNextSeqNum(mPacket.getDestAddr());
+							Short nextSeq = getNextSeqNum(mPacket.getDestAddr());
 							mPacket.setSequenceNumber(nextSeq);
 						}
 						mTryCount = 0;
@@ -185,10 +182,9 @@ public class SendTask implements Runnable {
 				
 				// ...do the usual routine:
 				if(mRF.inUse() || mRF.getIdleTime() < elapsed) {
-					// Someone jumped on, determine how long we actually waited
-					//  this is "wasted time", but we can travel back in time
 					setState(WAITING_FOR_OPEN_CHANNEL);
 					
+				// Done waiting this packet's IFS
 				} else if(timeLeft <= 0) {
 					long time = mClock.time();
 					// if waited long enough && within EPSILON of 50 units
@@ -212,9 +208,7 @@ public class SendTask implements Runnable {
 			case WAITING_BACKOFF:
 				timeLeft = mBackoff - elapsed;
 				if(mRF.inUse() || mRF.getIdleTime() < elapsed) {
-					// Someone jumped on, determine how long we actually waited
-					// before they got on, subtract that from backoff
-					// rest is "wasted time", but we can travel back in time
+					// Someone jumped on
 					setState(WAITING_FOR_OPEN_CHANNEL);
 					
 					// Else if waited long enough && within EPSILON of 50 units
@@ -226,7 +220,7 @@ public class SendTask implements Runnable {
 						// Busy wait until the next 50 unit boundary
 						break;
 					}
-					Log.d(TAG,"done waiting backoff at " + mClock.time());
+					Log.d(TAG, "Done waiting backoff at " + mClock.time());
 					if(mPacket.isBeacon()) {
 						// update time to the latest
 						mClock.updateBeacon(mPacket);
@@ -235,6 +229,7 @@ public class SendTask implements Runnable {
 							// mClock!!! You were too slow!!!
 							mBackoff = mClock.time() - mLastEvent;
 							setState(WAITING_FOR_OPEN_CHANNEL);
+							break;
 						}
 					}
 					
@@ -242,7 +237,7 @@ public class SendTask implements Runnable {
 					int bytesSent = transmit(mPacket);
 					if(mPacket.isBeacon()) 
 						mClock.onBeaconTransmit();
-					// Log tranmit time if we're in RTT test mode
+					// Log transmit time if we're in RTT test mode
 					if(LinkLayer.layerMode == LinkLayer.MODE_ROUND_TRIP_TEST)
 						mClock.logTransmitTime(mPacket.getSequenceNumber());
 					mTryCount++;
@@ -255,14 +250,12 @@ public class SendTask implements Runnable {
 						prepareForRetry();
 						setState(WAITING_FOR_OPEN_CHANNEL);
 					} else if(mPacket.getType() == Packet.CTRL_DATA_CODE) {
-						// Wait for an ack
 						setState(WAITING_FOR_ACK);
 					} else {
 						// Don't bother with retries for ACKS and BEACONS
 						retirePacket();
 						setState(WAITING_FOR_DATA);
-					}
-					
+					}					
 				} else {
 					try {
 						sleepyTime();
@@ -273,12 +266,6 @@ public class SendTask implements Runnable {
 				}
 				break;
 				
-			/* TODO 
-			 * optimize. seems like we could be waiting for an open channel
-			 * and waiting packet ifs while we wait for an ack
-			 * we just wouldn't send unless ackWaitTime has elapsed
-			 * it'd be more complicated though...
-			 */
 			case WAITING_FOR_ACK:
 				// If we're done with this packet
 				if(mTryCount >= MAX_TRY_COUNT || receivedAckFor(mPacket)) {
@@ -318,18 +305,16 @@ public class SendTask implements Runnable {
 						Log.e(TAG, e.getMessage());		
 					}
 				}
-				break;
-				
-			} // End switch
-			
-		} // End while
+				break;				
+			}
+		}
 		
 		Log.e(TAG, "Interrupted!");
 	}
 	
 	/**
 	 * Sets the state and logs the state change event with current clock time
-	 * @param newState
+	 * @param newState This task's new state
 	 */
 	private void setState(int newState) {
 		setState(newState, mClock.time());
@@ -337,8 +322,8 @@ public class SendTask implements Runnable {
 	
 	/**
 	 * Sets the state and logs state change with specified time
-	 * @param newState
-	 * @param time
+	 * @param newState This task's new state
+	 * @param time The time of the state change
 	 */
 	private void setState(int newState, long time) {
 		// align frame start to 50 unit increment
@@ -352,7 +337,6 @@ public class SendTask implements Runnable {
 			Log.d(TAG, "Waiting for open channel. Try count: " + mTryCount);
 			break;
 		case WAITING_PACKET_IFS:
-//			long p = mPacket.getPriority();
 			Log.d(TAG, "Waiting packet priority: " + mPacket.getIFS());
 			break;
 		case WAITING_BACKOFF:
@@ -432,7 +416,7 @@ public class SendTask implements Runnable {
 	/**
 	 * Transmits a packet
 	 * @param p - Packet to transmit
-	 * @return
+	 * @return Number of bytes transmitted
 	 */
 	private int transmit(Packet p) {
 		Log.i(TAG, "Transmitting packet type " + p.getType()
@@ -473,7 +457,7 @@ public class SendTask implements Runnable {
 	 */
 	protected void sleepyTime(long nano) throws InterruptedException {
 		int millisWait = (int) (nano / NANO_PER_MILLIS);
-        int nanoWait = (int) (nano % NANO_PER_MILLIS);
+      int nanoWait = (int) (nano % NANO_PER_MILLIS);
 		//Log.d(TAG, "sleepyTime! " + nano + "ms");
 		Thread.sleep(millisWait, nanoWait);
 	}
@@ -504,19 +488,17 @@ public class SendTask implements Runnable {
 		Packet ack = mSendAckQueue.peek();
 		if(ack != null) {
 			long ackElapsed = mClock.time() - ack.getTimeInstantiated();
-			if(ackElapsed >=  Packet.SIFS) {
-				if(mClock.time() % 50 <= EPSILON) {
-					Log.d(TAG, "Ack queue size " + mSendAckQueue.size());
-					Log.d(TAG, "Sending ack, seq num " + ack.getSequenceNumber());
-					mRF.transmit(ack.getBytes());
-					try {
-						mSendAckQueue.take();
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
+			// Send if SIFS has elapsed and we're on a % 50 boundary
+			if(ackElapsed >= Packet.SIFS && mClock.time() % 50 <= EPSILON) {
+				Log.d(TAG, "Sending ack, seq num " + ack.getSequenceNumber());
+				mRF.transmit(ack.getBytes());
+				try {
+					mSendAckQueue.take();
+				} catch (InterruptedException e) {
+					Log.e(TAG, e.getMessage());
+					e.printStackTrace();
 				}
-			}
+			}			
 		}
 	}
 }
