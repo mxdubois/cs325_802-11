@@ -40,10 +40,9 @@ public class LinkLayer implements Dot11Interface {
 	public static final int INSUFFICIENT_BUFFER_SPACE = 10;
 
 	public static final int RECV_DATA_BUFFER_SIZE = 4;
-	public static final int RECV_ACK_BUFFER_SIZE = 4;
-	public static final int  SEND_ACK_BUFFER_SIZE = 4;
-	private static final int MAX_OUT_DATA_PACKETS = 4;
-
+	public static final int OUT_DATA_BUFFER_SIZE = 4;
+	public static final int RECV_ACK_BUFFER_SIZE = 5;
+	public static final int SEND_ACK_BUFFER_SIZE = 5;
 
 	private RF mRF;   // The physical layer
 	private short mMac; // Our MAC address
@@ -51,22 +50,21 @@ public class LinkLayer implements Dot11Interface {
 	private BlockingQueue<Packet> mRecvData;
 	private BlockingQueue<Packet> mRecvAck;
 	private BlockingQueue<Packet> mSendAckQueue;
-	private BlockingQueue<Packet> mSendDataQueue;
-	
+	private BlockingQueue<Packet> mSendDataQueue;	
 
 	private Thread mRecvThread;
 	private RecvTask mRecvTask;
 	private Thread mSendThread;
 	private SendTask mSendTask;
 
+	// Offset into the current data packet
 	private int mLastRecvDataOffset;
+	// Last received data packet
 	private Packet mLastRecvData;
 
 	private NSyncClock mClock;
+	// Link layer status
 	private AtomicInteger mStatus;
-
-
-	// TODO RF_INIT_FAILED
 
 	/**
 	 * Constructor takes a MAC address and the PrintWriter to which our output will
@@ -107,7 +105,7 @@ public class LinkLayer implements Dot11Interface {
 		mRecvData = new ArrayBlockingQueue<Packet>(RECV_DATA_BUFFER_SIZE);
 		mSendAckQueue = new ArrayBlockingQueue<Packet>(SEND_ACK_BUFFER_SIZE);
 		mRecvAck = new ArrayBlockingQueue<Packet>(RECV_ACK_BUFFER_SIZE);
-		mSendDataQueue = new PriorityBlockingQueue<Packet>();
+		mSendDataQueue = new ArrayBlockingQueue<Packet>(OUT_DATA_BUFFER_SIZE);
 
 		mClock = new NSyncClock(ourMAC);
 
@@ -164,7 +162,7 @@ public class LinkLayer implements Dot11Interface {
 		}
 
 		// Don't queue more than MAX_OUT_DATA_PACKETS
-		if(mSendDataQueue.size() > MAX_OUT_DATA_PACKETS) {
+		if(mSendDataQueue.size() > OUT_DATA_BUFFER_SIZE) {
 			setStatus(INSUFFICIENT_BUFFER_SPACE);
 			return -1;
 		}
@@ -332,17 +330,12 @@ public class LinkLayer implements Dot11Interface {
 					RoundTripTimeTest.RTT_TEST_DEST_MAC, mMac, 
 					new byte[] {(byte)i}, 1, mClock.time());
 			
-			// Wait until there's room in the queue. Sleeping on this thread
-			// shouldn't cause any problems - if we're in RTT mode there won't be
-			// any other functionality to block
-			while(mSendDataQueue.size() >= MAX_OUT_DATA_PACKETS) {
-				try {
-					Thread.sleep(100);
-				} catch (InterruptedException e) {
-					Log.e(TAG, e.getMessage());
-				}
+			try {
+				// Block until there's room in the queue.
+				mSendDataQueue.put(dataPacket);
+			} catch (InterruptedException e) {
+				Log.e(TAG, "Unable to queue packet: " + e.getMessage());
 			}
-			mSendDataQueue.offer(dataPacket);
 		}
 	}
 }
